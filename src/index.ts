@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { launchSession, ensureLoggedIn } from './auth/session';
+import { Page } from 'playwright';
+import { launchSession, isLoginPage, promptManualLogin } from './auth/session';
 import {
   buildCanonicalUrl,
   verifyCountryHeading,
@@ -23,6 +24,7 @@ interface AppConfig {
   logsDir: string;
   countryCodesFile: string;
   filters: FiltersConfig;
+  auth?: { maxLoginAttempts?: number };
   datePolicy: { requestedStart: string; requestedEnd: string; mode: string };
   download: { format: string; overwrite: boolean; timeoutMs: number; downloadAttempts: number };
   filenameTemplate: string;
@@ -51,6 +53,37 @@ function makeLogger(logFile: string): Logger {
 
 const cap = (s: string): string => (s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+/**
+ * Navigate to the query URL and ensure we land on the DATA page, not the login page.
+ * On a login redirect (first run or expired session, PRD §22/§28) we pause for a manual
+ * login and re-navigate — up to maxLoginAttempts — instead of crashing on the login page.
+ */
+async function gotoAuthenticated(
+  page: Page,
+  url: string,
+  maxLoginAttempts: number,
+  log: Logger,
+): Promise<void> {
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+
+  let attempts = 0;
+  while (await isLoginPage(page)) {
+    attempts += 1;
+    if (attempts > maxLoginAttempts) {
+      throw new Error(
+        `LOGIN_REQUIRED: still on the Trade Map login page after ${maxLoginAttempts} manual attempt(s).`,
+      );
+    }
+    log('warn', 'auth.login_required', { attempt: attempts, url: page.url() });
+    await promptManualLogin();
+    // Re-navigate to the real query URL now that the user has (hopefully) logged in.
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+  }
+  log('info', 'auth.ok', { url: page.url() });
+}
+
 async function main(): Promise<void> {
   const country = getArg('country') ?? 'Dominica';
   const runId = getArg('run-id') ?? new Date().toISOString().replace(/[:.]/g, '-');
@@ -77,10 +110,9 @@ async function main(): Promise<void> {
 
   const { context, page } = await launchSession(config.browserProfileDir, config.tradeMapBaseUrl);
   try {
-    await ensureLoggedIn(page, config.tradeMapBaseUrl);
-
     // Build the canonical query URL from the GLOBAL requested range (never a carried-over
-    // value) and navigate deterministically (PRD §4A, §6, §15).
+    // value) and navigate deterministically (PRD §4A, §6, §15). If Trade Map bounces us to
+    // its login page, PAUSE for a manual login and re-navigate — never crash on it.
     const url = buildCanonicalUrl(
       config.tradeMapBaseUrl,
       importerCode,
@@ -89,8 +121,7 @@ async function main(): Promise<void> {
       requestedEnd,
     );
     log('info', 'query.navigate', { country, importerCode, url });
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await gotoAuthenticated(page, url, config.auth?.maxLoginAttempts ?? 3, log);
 
     // Country verification gate before anything else (PRD §42).
     await verifyCountryHeading(page, country);

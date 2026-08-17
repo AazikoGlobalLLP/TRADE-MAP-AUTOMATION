@@ -71,17 +71,33 @@ export function buildCanonicalUrl(
  * looking at the wrong country. VERIFY heading selector against live DOM.
  */
 export async function verifyCountryHeading(page: Page, countryName: string): Promise<void> {
-  const texts = await page
-    .locator('h1, h2, [class*="title" i], [class*="heading" i]')
+  const needle = countryName.toLowerCase();
+  const candidates: string[] = [];
+
+  const title = await page.title().catch(() => '');
+  if (title) candidates.push(title);
+
+  const headingTexts = await page
+    .locator('h1, h2, h3, [class*="title" i], [class*="heading" i]')
     .allInnerTexts()
     .catch(() => [] as string[]);
-  const heading = texts.join(' ').trim();
-  if (!heading.toLowerCase().includes(countryName.toLowerCase())) {
+  candidates.push(...headingTexts);
+
+  const seen = candidates.join(' | ').trim();
+  if (seen.toLowerCase().includes(needle)) {
+    return;
+  }
+  if (!seen) {
     throw new Error(
-      `COUNTRY_NOT_FOUND: page heading does not mention "${countryName}". ` +
-        `Saw: "${heading.slice(0, 200)}". Calibrate the heading selector in driver.ts.`,
+      `COUNTRY_NOT_FOUND: found no heading/title text to verify "${countryName}". ` +
+        `Calibrate the heading selector in driver.ts against the live DOM.`,
     );
   }
+  throw new Error(
+    `COUNTRY_NOT_FOUND: page heading/title does not mention "${countryName}". ` +
+      `Saw: "${seen.slice(0, 200)}". If this looks like the login page, the auth step should ` +
+      `have paused first; otherwise calibrate the heading selector in driver.ts.`,
+  );
 }
 
 /**

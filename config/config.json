@@ -18,6 +18,10 @@
     "view": "table"
   },
 
+  "auth": {
+    "maxLoginAttempts": 3
+  },
+
   "datePolicy": {
     "requestedStart": "200001",
     "requestedEnd": "202606",

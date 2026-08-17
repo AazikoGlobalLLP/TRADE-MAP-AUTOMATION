@@ -22,39 +22,46 @@ export async function launchSession(
 }
 
 /**
- * Ensure the session is authenticated. If the page looks logged-out, PAUSE and ask the
- * user to log in manually, then wait for ENTER (PRD §22 "press Continue"). No credentials
- * are ever stored, typed, or logged by this automation.
+ * Is the browser currently sitting on Trade Map's login page? We detect the LOGIN PAGE
+ * directly (robust) rather than guessing "am I logged in?" on the home page (fragile).
+ * Multi-signal — any one is enough:
+ *   1. a visible password field (near-certain login signal),
+ *   2. a login-ish URL,
+ *   3. the known Market Analysis Tools banner text (confirmed live:
+ *      "... Your gateway to ITC's Market Analysis Tools ...").
  */
-export async function ensureLoggedIn(page: Page, baseUrl: string): Promise<void> {
-  if (await looksLoggedOut(page)) {
-    await waitForEnter(
-      '\n[ACTION REQUIRED] Please log in to Trade Map in the opened browser window,\n' +
-        'then return here and press ENTER to continue... ',
-    );
-    // Re-load so the freshly-authenticated session is reflected before we build the query.
-    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+export async function isLoginPage(page: Page): Promise<boolean> {
+  const url = page.url().toLowerCase();
+  if (url.includes('login') || url.includes('signin') || url.includes('logon')) {
+    return true;
   }
+
+  const hasPasswordField = await page
+    .locator('input[type="password"]')
+    .first()
+    .isVisible({ timeout: 1500 })
+    .catch(() => false);
+  if (hasPasswordField) {
+    return true;
+  }
+
+  const body = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
+  return body.includes('gateway to itc');
 }
 
 /**
- * Heuristic logged-out detector. A logged-out Trade Map exposes a Login/Sign-in
- * affordance. VERIFY these selectors against the live DOM (docs/spec RISKS).
- * Defaults to "prompt" when uncertain — pressing ENTER when already logged in is harmless.
+ * Pause the run and wait for the user to log in manually, then press ENTER (PRD §22).
+ * No credentials are ever typed, stored, or logged by this automation.
  */
-async function looksLoggedOut(page: Page): Promise<boolean> {
-  const loginMarker = page
-    .locator('a:has-text("Login"), a:has-text("Sign in"), a:has-text("Log in"), #ctl00_MenuControl_Login')
-    .first();
-  const hasLogin = await loginMarker.isVisible({ timeout: 3000 }).catch(() => false);
-  return hasLogin;
-}
-
-/** Block until the user presses ENTER on stdin. */
-function waitForEnter(prompt: string): Promise<void> {
+export function promptManualLogin(message?: string): Promise<void> {
+  const text =
+    message ??
+    '\n[ACTION REQUIRED] Trade Map is showing its login page.\n' +
+      '  1. Log in inside the opened browser window.\n' +
+      '  2. Come back here and press ENTER to continue... ';
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise<void>((resolve) => {
-    rl.question(prompt, () => {
+    rl.question(text, () => {
       rl.close();
       resolve();
     });
