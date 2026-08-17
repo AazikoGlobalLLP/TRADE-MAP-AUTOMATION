@@ -56,6 +56,13 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
 - Any browser script that uses `page.evaluate` MUST run compiled (`node dist/...`), not `tsx`:
   esbuild injects a `__name` helper that is undefined in the browser → `ReferenceError`. `export`
   and `calibrate` npm scripts already do `tsc && node dist/...`.
+- The export run is INTERACTIVE + HEADED and is the USER's to run, never Claude's via a tool shell.
+  It opens a real browser and, on a login page, PAUSES on a terminal `readline` ENTER
+  (`promptManualLogin`). A non-interactive tool shell has no stdin → the prompt would hang a headed
+  browser with no way to answer. Hand the user the command; don't launch it in the background.
+- To VERIFY a finished export, read `manifests/latest-run.json` + the files on disk — do NOT re-run
+  the export "just to check" (it re-downloads all 204). Acceptance = input count == manifest entries
+  == files on disk, every SUCCESS→existing non-zero file, effective ranges vary (isolation held).
 
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.

@@ -14,26 +14,26 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 3 — Range isolation (India→Pakistan→China) | ✅ DONE — headless 29/29 + live 3-file run, truthful effective range 2026-08-17 |
 | 4 — Batch loop + retry + failure evidence | ✅ DONE — headless 22/22 + live `--batch` proven via 4-country smoke (fresh Dominica SUCCESS) 2026-08-17 |
 | 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
-| 6 — Session-expiry + query gate + report | ⬜ todo (deferred — mitigation is manual rerun; build after first full run informs it) |
-| 7 — Full 204-country production + acceptance | 🟨 NEXT — codes complete (205), naming finalized; first full run not yet executed |
+| 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
+| 6 — Session-expiry + query gate + report | ⬜ todo — now polish (full run strained nothing); auto re-login + run-report.xlsx |
 
 ## Now
-**Harvest COMPLETE (205 codes, 0 unresolved) and the live batch pipeline is PROVEN.** A 4-country smoke test
-(`npm run export -- --batch`) downloaded Dominica fresh → `SUCCESS` with a truthful effective range, skipped
-the pre-existing 3, and on rerun skipped all 4 (Dominica at 0 attempts = resume manifest working). The
-filename convention is now country-first + human-readable
-(`Korea-Republic-of__Imports-from-World__AllProducts__2001-03_to_2026-06__Monthly-Mirror-USD.xlsx`). All work
-committed on `phase-1-poc`; build clean; nothing pushed. **#1 priority: run the first full 204-country export.**
-Biggest risk: session expiry mid-run (Phase 6 auto re-login not built) — mitigation is a manual rerun (resume skips done).
+**Phase 7 DONE — the full 204-country production export ran and is verified.** `output/` holds **204 valid
+`.xlsx` files, 204/204 SUCCESS, 0 FAILED** (manifest `2026-08-17T14-35-29-629Z`, ~32 min, clean exit),
+uniformly named country-first
+(`Afghanistan__Imports-from-World__AllProducts__2001-01_to_2026-06__Monthly-Mirror-USD.xlsx`). Verified three
+ways: input(204)==manifest(204)==files(204); every SUCCESS→existing non-zero file; effective ranges vary
+(**47 FULL / 157 CLIPPED** = §39 isolation held); sample workbooks open. All code committed on `phase-1-poc`;
+build clean; **nothing pushed** — the deliverable files are gitignored (on disk, not git).
 
 ## Next 3
-1. **#1 — Run the full 204-country export (Phase 7 production run).** Clear the 4 old-named smoke files + old
-   manifest first, then `npm run export -- --batch --countries input/countries-full.xlsx`. Babysit for a
-   `FAILED` cluster (session expiry) → re-login + rerun the same command; resume continues.
-2. Validate a sample of the 204 output files (open as workbook, correct query, non-empty) + walk the
-   acceptance checklist AC-01…AC-12.
-3. Phase 6 — session-expiry auto pause/resume (makes the full run truly hands-off) + `run-report.xlsx`
-   (§28/§31) + query-validation gate polish. Build it informed by what the first full run actually strained.
+1. **#1 — Make it durable: push a properly-named branch + open a PR.** `git checkout -b phase-7-full-export`
+   then `git push -u origin phase-7-full-export`. Do NOT re-run the export to "check" — re-verify by reading
+   `manifests/latest-run.json` (204/204 SUCCESS) instead.
+2. Phase 6 — session-expiry auto pause/resume (makes future runs truly hands-off) + `run-report.xlsx`
+   (§28/§31) + query-gate polish. Now polish, not rescue: the full run strained none of it.
+3. Optional: hand the 204 output files to whoever consumes them / move production output to the configured
+   `D:\TradeMap\Exports` target if that is where the deliverable belongs.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress

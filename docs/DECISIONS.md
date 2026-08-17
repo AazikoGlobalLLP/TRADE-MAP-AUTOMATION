@@ -193,3 +193,16 @@ Format: date · decision · why · alternative rejected.
   HTML is dumped to `logs/calibration/picker-open-*.html` for name reconciliation. Confirmed hands-off:
   USA=842, Germany=276, UK=826, Hong Kong China=344, France=251, Japan=392. Rejected: the prior `<mat-option>`
   path (never matched) and starting on the homepage (no picker). CLAUDE.md gotcha corrected to match.
+- **2026-08-17 · Phase 7 = a RUN, not a build; no new code, verify from the manifest + disk (production).**
+  Why: the pipeline was already proven live end-to-end (Phases 3B–5), so the full 204-country export needed
+  no new capability — only execution at scale. The user ran `npm run export -- --batch --countries
+  input/countries-full.xlsx` (interactive/headed: it opens a real browser and, on a login page, PAUSES on a
+  terminal `readline` ENTER — so it CANNOT be launched from a non-interactive tool shell; it is the user's to
+  run). Result: 204/204 SUCCESS, 0 FAILED, ~32 min, clean exit. Acceptance is verified WITHOUT re-running:
+  input(204)==manifest(204)==files(204), every SUCCESS→existing non-zero file, effective ranges vary
+  (47 FULL / 157 CLIPPED = isolation held), sample workbooks open. Rejected: re-exporting to "check" (would
+  re-download all 204 — verification reads the manifest + disk instead).
+- **2026-08-17 · Pre-run cleanup is move-to-backup, never bare hard-delete (data-safety).** Why: the 5
+  old-named smoke files + old manifest had to be cleared for uniform naming, but CLAUDE.md forbids discarding
+  work. They were MOVED to the session scratchpad `pre-phase7-backup/` first (reversible), then removed from
+  `output/`/`manifests/`. Rejected: `Remove-Item` straight off (irreversible even for gitignored generated data).
