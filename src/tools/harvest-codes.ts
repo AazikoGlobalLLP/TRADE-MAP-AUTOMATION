@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Page } from 'playwright';
+import { Page, Locator } from 'playwright';
 import { launchSession, isLoginPage, promptManualLogin } from '../auth/session';
-import { readHeadingCandidates } from '../trademap/driver';
+import { buildCanonicalUrl, readHeadingCandidates } from '../trademap/driver';
 import { readCountries } from '../input/readCountries';
 import { loadConfig } from '../config/loadConfig';
 
@@ -46,51 +46,112 @@ function writeCodes(file: string, map: CodeMap): void {
   fs.renameSync(tmp, file);
 }
 
+/** Escape a string for safe literal use inside a RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Harvest one country's code via the top search box. Returns the confirmed numeric
- * code, or null (with a reason logged) if it can't be confirmed — never a guess.
+ * Return the Importer search box, first ensuring (a) we are on a Trade Map DATA page that
+ * renders the picker, and (b) the Importer picker is OPENED so its `<input>` exists.
+ *
+ * Two facts learned live (2026-08-17):
+ *   - The bare homepage has NO country picker — it lives only on a time-series data page,
+ *     so if the picker is absent we navigate to `seedUrl` (a canonical imports page built
+ *     from an ALREADY-KNOWN code) and look again.
+ *   - The Importer picker is COLLAPSED by default (shows only the "Importer" label + the
+ *     current value); the search `<input placeholder="Type (min...">` renders only AFTER
+ *     the picker is clicked open. So we click the Importer picker to reveal the input.
  */
-async function harvestOne(page: Page, baseUrl: string, name: string, timeoutMs: number): Promise<string | null> {
-  // The search box lives in the app shell; if it's gone (after a navigation) reload home.
-  let box = page.locator('input[placeholder^="Type (min"]').first();
-  if (!(await box.isVisible({ timeout: 2000 }).catch(() => false))) {
-    await page.goto(baseUrl.replace(/\/+$/, ''), { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle').catch(() => undefined);
-    box = page.locator('input[placeholder^="Type (min"]').first();
-    if (!(await box.isVisible({ timeout: 4000 }).catch(() => false))) {
-      process.stdout.write(`  ✗ ${name}: search box not found\n`);
-      return null;
+async function ensurePickerVisible(page: Page, seedUrl: string, timeoutMs: number): Promise<Locator | null> {
+  const inputSel = 'input[placeholder^="Type (min"]';
+
+  // Open the Importer picker (if needed) and return its now-visible search input.
+  const tryOpen = async (waitMs: number): Promise<Locator | null> => {
+    const box = page.locator(inputSel).first();
+    if (await box.isVisible({ timeout: 800 }).catch(() => false)) return box; // already open
+
+    // Scope to the IMPORTER picker: both Importer/Exporter are <app-country-picker>, but
+    // only the importer's text contains "Importer" ("Exporter" does not include it).
+    const importer = page.locator('app-country-picker', { hasText: 'Importer' }).first();
+    if (!(await importer.isVisible({ timeout: waitMs }).catch(() => false))) return null;
+
+    const trigger = importer.locator('.form-container').first();
+    const clickTarget = (await trigger.isVisible({ timeout: 1000 }).catch(() => false)) ? trigger : importer;
+    for (let i = 0; i < 2; i++) {
+      await clickTarget.click().catch(() => undefined);
+      if (await box.isVisible({ timeout: 2000 }).catch(() => false)) return box;
     }
+    return null;
+  };
+
+  const box = await tryOpen(2000);
+  if (box) return box;
+
+  await page.goto(seedUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  return tryOpen(Math.max(6000, Math.floor(timeoutMs / 2)));
+}
+
+/**
+ * Harvest one country's code via the Importer search box. Returns the confirmed numeric
+ * code, or null (with a reason logged) if it can't be confirmed — never a guess.
+ *
+ * The picker is a custom <app-country-picker> that renders its results into an Angular
+ * CDK OVERLAY (`.cdk-overlay-container`) — NOT <mat-option> (confirmed from the live
+ * capture). So we match the result by its visible text inside that overlay, which is
+ * element-agnostic. If nothing matches, we dump the OPEN overlay's HTML to `dumpDir`
+ * so the real option markup can be read, and report the country UNRESOLVED.
+ */
+async function harvestOne(
+  page: Page,
+  seedUrl: string,
+  name: string,
+  timeoutMs: number,
+  dumpDir: string,
+): Promise<string | null> {
+  const box = await ensurePickerVisible(page, seedUrl, timeoutMs);
+  if (!box) {
+    process.stdout.write(`  ✗ ${name}: search box not found\n`);
+    return null;
   }
 
   const urlBefore = page.url();
   await box.click();
   await box.fill('');
-  await box.type(name, { delay: 15 });
+  await box.type(name, { delay: 40 });
 
-  // Wait for the autocomplete options to render (min 2 chars → results).
-  const options = page.locator('mat-option');
-  if (!(await options.first().waitFor({ state: 'visible', timeout: timeoutMs }).then(() => true).catch(() => false))) {
-    process.stdout.write(`  ✗ ${name}: no autocomplete options appeared\n`);
+  // Results render into the CDK overlay. Match the option by its visible text
+  // (exact-normalised first, then prefix) rather than by a guessed element tag.
+  const overlay = page.locator('.cdk-overlay-container');
+  const escaped = escapeRegExp(norm(name));
+  const exactRx = new RegExp(`^\\s*${escaped}\\s*$`, 'i');
+  const prefixRx = new RegExp(`^\\s*${escaped}`, 'i');
+
+  let target = overlay.getByText(exactRx).first();
+  let ok = await target.waitFor({ state: 'visible', timeout: timeoutMs }).then(() => true).catch(() => false);
+  if (!ok) {
+    target = overlay.getByText(prefixRx).first();
+    ok = await target.isVisible({ timeout: 1500 }).catch(() => false);
+  }
+  if (!ok) {
+    const seen = (await overlay.innerText().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 160);
+    let dumpNote = ' (overlay empty — no results rendered)';
+    try {
+      const html = await overlay.innerHTML();
+      if (html.trim()) {
+        const dumpPath = path.join(dumpDir, `picker-open-${name.replace(/[^a-z0-9]+/gi, '_')}.html`);
+        fs.writeFileSync(dumpPath, html, 'utf8');
+        dumpNote = ` Dumped open overlay → ${dumpPath}`;
+      }
+    } catch {
+      /* leave the default note */
+    }
+    process.stdout.write(`  ✗ ${name}: no matching option. Overlay text: "${seen}".${dumpNote}\n`);
     return null;
   }
 
-  // Pick the option whose text matches the name (exact-normalised, else prefix).
-  const count = await options.count();
-  const texts: string[] = [];
-  let target = -1;
-  for (let i = 0; i < count; i++) {
-    const t = (await options.nth(i).innerText().catch(() => '')) || '';
-    texts.push(t);
-    if (norm(t) === norm(name)) { target = i; break; }
-  }
-  if (target < 0) target = texts.findIndex((t) => norm(t).startsWith(norm(name)));
-  if (target < 0) {
-    process.stdout.write(`  ✗ ${name}: no matching option. Saw: [${texts.map((t) => t.trim()).slice(0, 6).join(' | ')}]\n`);
-    return null;
-  }
-
-  await options.nth(target).click();
+  await target.click();
   // Selecting a country navigates to its page; wait for the importer code to appear/change.
   await page
     .waitForFunction(
@@ -138,18 +199,49 @@ async function main(): Promise<void> {
       `\n`,
   );
 
+  // The Importer picker only exists on a DATA page; seed it from an ALREADY-KNOWN code
+  // (never invented). Requires at least one known real country in country-codes.json.
+  const seedEntry = Object.entries(map).find(
+    ([k, v]) => !k.startsWith('_') && norm(k) !== 'world' && /^\d{2,4}$/.test(String(v)),
+  );
+  if (!seedEntry) {
+    throw new Error(
+      `Harvest needs at least one already-known country code in ${codesPath} to open the ` +
+        'search page (found none besides World). Confirm one code manually first, then rerun.',
+    );
+  }
+  const [seedName, seedCode] = seedEntry;
+  const seedUrl = buildCanonicalUrl(
+    config.tradeMapBaseUrl,
+    seedCode,
+    config.filters,
+    config.datePolicy.requestedStart,
+    config.datePolicy.requestedEnd,
+  );
+  const dumpDir = path.join(path.resolve(config.logsDir), 'calibration');
+  fs.mkdirSync(dumpDir, { recursive: true });
+  process.stdout.write(`Search page seeded from known country: ${seedName} (${seedCode})\n`);
+
   const { context, page } = await launchSession(config.browserProfileDir, config.tradeMapBaseUrl);
   const confirmed: string[] = [];
   const unresolved: string[] = [];
   try {
+    // Land on a DATA page (which has the Importer picker) before anything else; if the
+    // session expired, this data page — not the marketing homepage — reliably trips the
+    // login detector.
+    await page.goto(seedUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+
     let attempts = 0;
     while (await isLoginPage(page)) {
       if (++attempts > 5) throw new Error('Still on the Trade Map login page after 5 attempts.');
       await promptManualLogin();
+      await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+      await page.waitForLoadState('networkidle').catch(() => undefined);
     }
 
     for (const name of target) {
-      const code = await harvestOne(page, config.tradeMapBaseUrl, name, perCountryTimeout).catch((e) => {
+      const code = await harvestOne(page, seedUrl, name, perCountryTimeout, dumpDir).catch((e) => {
         process.stdout.write(`  ✗ ${name}: ${(e as Error).message}\n`);
         return null;
       });

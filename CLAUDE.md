@@ -43,8 +43,13 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
   many codes, run `npm run harvest` (`src/tools/harvest-codes.ts`): it types each country into
   Trade Map's search, reads the code from the URL, and confirms it against the page heading.
 - The country selector is a type-to-search AUTOCOMPLETE (no native `<select>`, so the full country
-  list is NEVER in the DOM at once). Search input `placeholder^="Type (min 2 characters)"`, results
-  are `<mat-option>`, selected code appears in the URL. Don't try to scrape a bulk dropdown — there isn't one.
+  list is NEVER in the DOM at once). Search input `placeholder^="Type (min 2 characters)"`, selected
+  code appears in the URL. Don't try to scrape a bulk dropdown — there isn't one. TWO live facts
+  (confirmed 2026-08-17, the hard way): (1) the Importer picker is COLLAPSED by default — you must
+  CLICK it (`app-country-picker` whose text contains "Importer") before the search `<input>` renders;
+  (2) results are NOT `<mat-option>` — the custom `<app-country-picker>` renders them into an Angular
+  CDK OVERLAY (`.cdk-overlay-container`). Match the option by its VISIBLE TEXT inside that overlay,
+  not by a tag. The bare homepage has no picker at all; it exists only on a `/time-series/` data page.
 - Filters are Angular-Material components with NO native `<select>`. Read/verify filters from the
   canonical URL (`parseFiltersFromUrl`), not the DOM. The export Save is the mat-menu button labelled
   exactly "Save" (a separate "Save query" button exists and comes first in the DOM).
