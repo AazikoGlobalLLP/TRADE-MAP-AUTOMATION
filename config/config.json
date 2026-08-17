@@ -46,5 +46,5 @@
 
   "manifestFile": "./manifests/latest-run.json",
 
-  "filenameTemplate": "{country}_TradeMap_Imports_AllProducts_byExporter_{frequency}_{source}_{start}-{end}_{currency}.{extension}"
+  "filenameTemplate": "{countrySlug}__{flow}-from-World__AllProducts__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}"
 }

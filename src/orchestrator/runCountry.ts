@@ -50,6 +50,21 @@ export interface RunCountryOptions {
 const cap = (s: string): string => (s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /**
+ * Filesystem-friendly country slug for the filename: NFC, then any run of
+ * non-letter/non-digit chars (spaces, commas, apostrophes, dots, parens) collapses
+ * to a single '-', with edge hyphens trimmed. Accented letters are KEPT (NTFS is
+ * Unicode). "Korea, Republic of" → "Korea-Republic-of"; "Côte d'Ivoire" → "Côte-d-Ivoire".
+ */
+const countrySlug = (name: string): string =>
+  name
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+
+/** "200101" → "2001-01" (human-readable YYYY-MM). Non-6-digit input passes through unchanged. */
+const prettyYYYYMM = (s: string): string => (/^\d{6}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4)}` : s);
+
+/**
  * Run one country's export end to end and return its result. `global` is the
  * immutable GLOBAL requested range — read here, never written back.
  */
@@ -126,12 +141,16 @@ export async function runCountry(
 
   // Generate the target filename from the EFFECTIVE (data) range (PRD §19 — truthful name).
   const filename = generateFilename(config.filenameTemplate, {
-    country,
+    country, // raw name (kept for backward compatibility with older templates)
+    countrySlug: countrySlug(country), // clean, hyphen-joined name for the new convention
+    flow: cap(config.filters.tradeFlow), // "Imports" — truthful if the flow ever changes
     frequency: cap(config.filters.frequency),
     source: cap(config.filters.source),
     currency: config.filters.currency,
-    start: eff.start,
+    start: eff.start, // raw YYYYMM (kept for backward compatibility)
     end: eff.end,
+    startPretty: prettyYYYYMM(eff.start), // "2001-01"
+    endPretty: prettyYYYYMM(eff.end), // "2026-06"
     extension: config.download.format,
   });
 

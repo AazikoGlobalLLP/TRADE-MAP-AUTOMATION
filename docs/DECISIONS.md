@@ -42,6 +42,15 @@ Format: date · decision · why · alternative rejected.
   real Trade Map search selectors can't be pinned without a live login (same rule as
   `readRangeFromDom()`). It logs `country.ui_resolution_used` first, then reads the numeric
   code from the URL; if the DOM doesn't match it THROWS — never returns a guessed code.
+- **2026-08-17 · Country-first, human-readable filename convention (pre-full-run).** Template is now
+  `{countrySlug}__{flow}-from-World__AllProducts__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}`
+  → e.g. `Korea-Republic-of__Imports-from-World__AllProducts__2001-03_to_2026-06__Monthly-Mirror-USD.xlsx`.
+  Why: the deliverable is 204 files a human browses — country leads (folder sorts/groups by country), `__`
+  separates sections, dates are `YYYY-MM`. Two new tokens added to the (single) call site in `runCountry.ts`:
+  `countrySlug` (NFC; non-alphanumeric runs → single `-`; accents kept) and `startPretty`/`endPretty`
+  (`YYYY-MM`); `flow` too. Old tokens (`country`, `start`, `end`) kept — backward compatible. Filenames still
+  use the EFFECTIVE range. NOTE: because the name changed, the 4 pre-existing old-named test files + the old
+  manifest must be cleared before the full run so all 204 come out uniformly named (see HANDOFF step 1).
 - **2026-08-17 · Filenames are sanitized for Windows (Phase 2).** Why: production writes to
   `D:\TradeMap\Exports` and the resolver now accepts arbitrary names; replace `\ / : * ? " < > |`
   + control chars with `_` and trim trailing dots/spaces. `generateFilename` moved to
