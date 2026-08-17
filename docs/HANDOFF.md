@@ -1,56 +1,51 @@
-# HANDOFF — Trade Map Automated Export System — Phase 5A + code-harvest prep — 2026-08-17
+# HANDOFF — Trade Map Automated Export System — Phase 5B/live prep (code harvester) — 2026-08-17
 
 ## Done
-- **Phase 5A code-complete and green offline.** `npm run test:manifest` → **24/24**, `npm run build`
-  clean (tsc, 0 errors), no regression: `npm run test:isolation` **29/29**, `npm run test:batch` **22/22**.
-  Resume manifest (atomic `manifests/latest-run.json`), pre-download idempotency skip (§36, re-validates the
-  file on disk), collision modes `skip|overwrite|version`, and `--force` (ignore manifest + overwrite) all work.
-- **204-country production list is loaded and readable.** `input/countries-full.xlsx` was generated from
-  `countries list.txt` (leading serial number + the trailing `y` flag stripped); the batch reader parses all
-  **204** names cleanly (no dupes, no bad rows).
-- **Country-code harvester built + compiles.** `npm run harvest` (`src/tools/harvest-codes.ts`) uses Trade
-  Map's own top search box to look up each country, reads the numeric code from the resulting URL, and
-  CONFIRMS it against the live page heading — no code is ever invented. Resume-safe + incremental (writes
-  `config/country-codes.json` atomically after each confirmation; a rerun skips already-known codes).
-- **Country-selector calibrated from a live capture** (`logs/calibration/country-list.*`): the selector is a
-  type-to-search **autocomplete** (no native `<select>`, so the full list is never in the DOM at once). The
-  search input is `input[placeholder^="Type (min 2 characters)"]`, results are `<mat-option>`, and the
-  selected country's code appears in the URL (`…/c/<code>/…`). Codes are **UN-Comtrade** (e.g. Algeria=012,
-  USA=842, France=251), not always ISO — confirmed live, e.g. heading "Algeria's imports from World".
-- **Plain-language project overview published** as an Artifact (visual "what does it do" one-pager).
+- **The country-code harvester now works LIVE, hands-off.** `npm run harvest -- --limit 3`
+  auto-seeds a data page, opens the Importer picker, types each country, reads the code from
+  the URL, and confirms it against the page heading — with NO manual clicking. Confirmed live
+  this session: USA=842, Germany=276, UK=826, then (fully unattended) Hong Kong China=344,
+  France=251, Japan=392. France=251 matches the CLAUDE.md warning (not ISO 250).
+- **`config/country-codes.json` now holds 10 real countries** (+ World): Dominica, Pakistan,
+  India, China, USA, Germany, UK, Hong Kong China, France, Japan. **194 of 204 still to harvest.**
+- **All Phases 2–5 are now committed** (were uncommitted at session start). Build is clean (tsc, 0 errors).
 
-## Files changed (this session)
-- input/countries-full.xlsx — NEW: the 204-country production list (col A). The proven 4-country
-  `input/countries.xlsx` fixture is UNTOUCHED so `test:batch` stays 22/22.
-- src/tools/harvest-codes.ts — NEW: country-code harvester (search → URL code → heading confirm; resume-safe).
-- src/manifest/{manifest,resume,manifest-check}.ts, src/files/collision.ts — NEW (Phase 5A, see prior handoff).
-- src/orchestrator/runBatch.ts, src/files/save-validate.ts, src/orchestrator/runCountry.ts, src/index.ts,
-  src/config/schema.ts, config/config.json — Phase 5A wiring (manifest/idempotency/collision/`--force`).
-- package.json — added `harvest` + `test:manifest` scripts (note: user added an empty `"dev": ""` — harmless).
-- docs/spec/phase-5-manifest-resume-collision.md — NEW spec lock. DECISIONS/GLOSSARY/PHASES/PROJECT_MAP/STATUS updated.
-- logs/calibration/country-list.* — live capture (gitignored) used to calibrate the search selector.
+## Files changed
+- src/tools/harvest-codes.ts — rewrote the picker interaction to match the REAL Trade Map DOM:
+  seed a data page via `buildCanonicalUrl` (homepage has no picker), CLICK the collapsed Importer
+  picker open, match the result by visible text inside the CDK overlay (`.cdk-overlay-container`),
+  and dump the open overlay HTML on a no-match. Old code used `<mat-option>` (never rendered) and
+  started on the bare homepage — both wrong.
+- CLAUDE.md — corrected the country-selector gotcha (was "results are `<mat-option>`"; now: click the
+  collapsed Importer picker, results live in the CDK overlay, match by text).
+- config/country-codes.json — +6 confirmed codes from this session's live runs.
+- (earlier this session) 41 files from Phases 2–5 committed as `c1aa0db`.
 
 ## Decisions made
-- Harvest codes from Trade Map's own search (autocomplete → URL code → heading confirm), NOT from a bulk
-  dropdown (there isn't one) and NOT from ISO/memory (Trade Map uses Comtrade codes). Every code confirmed live.
-- Production list lives in a SEPARATE file (`countries-full.xlsx`) so the 4-country test fixture — and the
-  offline `test:batch` that pins it — never regress. Full run uses `--countries input/countries-full.xlsx`.
-- Phase 5 split 5A (built, offline-proven) + 5B (live, carried) — same 3B/4B pattern.
+- Harvest by DRIVING the real picker (seed data page → click Importer open → type → pick overlay
+  option by text → read `/c/<code>/` → confirm via heading), because Trade Map's picker is a custom
+  `<app-country-picker>` on a CDK overlay, NOT a Material autocomplete. No code is ever invented.
+- Seed the search page from an ALREADY-KNOWN code (first real entry in country-codes.json), so the
+  harvester never depends on the bare homepage (which has no picker at all).
 
 ## Known broken / deliberately skipped
-- **⚠️ GIT: only Phase 1 is committed.** All of Phases 2–5 + this session's work are UNCOMMITTED on branch
-  `phase-1-poc` (safe on disk; `/clear` will not lose them). Needs a commit + a proper branch before it's "real".
-- **~200 country codes NOT yet harvested** — only 4/204 known (Dominica, India, Pakistan, China). Needs one
-  login session: run the harvester. Until then a full 204 run would fail ~200 countries.
-- **Full 204-country export has NEVER run** — 0 real output files for the production list yet.
-- **5B (live resume demo) + 4B (live batch) carried** — logic proven offline, live confirmation pending.
-- **Phase 6 (mid-run re-login + run-report.xlsx) and Phase 7 (production hardening + final acceptance) — to do.**
-- Harvester autocomplete interaction is a FIRST version — may need a timing/selector tweak after the 3-country test.
+- **194/204 codes NOT yet harvested** — only 10 real countries known. Needs one login session to run
+  the full harvest; expect ~10–25 countries to fail auto-match on spelling (e.g. Russia, Korea,
+  Türkiye, the two Congos) and need a manual name fix — each failure dumps its overlay HTML to
+  `logs/calibration/picker-open-*.html` for reconciliation.
+- **Full 200+ export has NEVER run** — 0 production output files yet. Batch/resume/retry/manifest are
+  proven OFFLINE only. Realistic effort for all 200+: a supervised half-day (harvest ~1–1.5h incl.
+  manual name fixes, then export in resumable passes ~2–5h).
+- **Phase 6 (auto re-login on session expiry) NOT built** — a multi-hour export can drop its session
+  and fail countries until manual re-login + a resume rerun. This is the biggest blocker to a truly
+  hands-off full run.
+- **Nothing pushed** — all work is committed locally on branch `phase-1-poc` (misnamed; now holds
+  Phases 1–5 + harvester). Push a properly-named branch before opening a PR.
 
 ## Next session starts here
-- **Harvest the country codes** (the immediate blocker), then run the first real 204-country export.
-- First command: `npm run harvest -- --limit 3`  (a 3-country test; login once, then paste the ✓/✗ output).
-  If clean → `npm run harvest` (all ~200), then `npm run export -- --batch --countries input/countries-full.xlsx`.
-- Watch out for: the harvester's autocomplete step is unproven live — if the 3-country test shows ✗ (no options,
-  or wrong option picked for ambiguous names like "Congo"), fix the `mat-option` match/timing in harvest-codes.ts
-  BEFORE running all 200. And commit the uncommitted Phases 2–5 work.
+- **#1 PRIORITY: harvest all remaining codes, then run the first real 200+ export.**
+- First command: `npm run harvest`  (all remaining ~194; login once, leave it running).
+  Then reconcile any `✗` names (check `logs/calibration/picker-open-*.html`), rerun harvest to
+  finish them, then: `npm run export -- --batch --countries input/countries-full.xlsx`
+- Watch out for: **session expiry during the long export** (Phase 6 isn't built) — if many countries
+  start failing, re-login and rerun the SAME export command; resume skips everything already done.

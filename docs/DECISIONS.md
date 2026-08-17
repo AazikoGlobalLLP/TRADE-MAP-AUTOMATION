@@ -174,3 +174,13 @@ Format: date · decision · why · alternative rejected.
   `[China,India,Pakistan,Dominica]`. Built from `countries list.txt` (strip the leading serial number + trailing
   `y` flag). The full run uses `--countries input/countries-full.xlsx`; the default `batch.inputFile` stays the
   4-country fixture until codes are harvested (so an accidental `npm run batch` can't launch a ~200-fail run).
+- **2026-08-17 · The harvester DRIVES the real Trade Map picker; the earlier `<mat-option>` assumption was wrong (live-proven).**
+  Why: a fresh live capture + a live run showed the country selector is a custom `<app-country-picker>` on an
+  Angular CDK OVERLAY, not a Material autocomplete. Three corrections, each confirmed live: (1) the picker exists
+  only on a `/time-series/` DATA page — the bare homepage has none, so seed a data page via `buildCanonicalUrl`
+  from an already-known code; (2) the Importer picker is COLLAPSED by default — CLICK it (the `app-country-picker`
+  whose text contains "Importer") before its search `<input>` renders; (3) results are matched by VISIBLE TEXT
+  inside `.cdk-overlay-container`, never by `<mat-option>` (which never appears). On a no-match the open overlay
+  HTML is dumped to `logs/calibration/picker-open-*.html` for name reconciliation. Confirmed hands-off:
+  USA=842, Germany=276, UK=826, Hong Kong China=344, France=251, Japan=392. Rejected: the prior `<mat-option>`
+  path (never matched) and starting on the homepage (no picker). CLAUDE.md gotcha corrected to match.

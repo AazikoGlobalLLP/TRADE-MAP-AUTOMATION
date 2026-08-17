@@ -18,19 +18,20 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 7 — 30-country production + acceptance | ⬜ todo |
 
 ## Now
-Phase 5A complete (headless 24/24 + build clean; isolation 29/29, batch 22/22). Resume manifest, idempotency
-skip (§36), collision modes, and `--force` all work offline. **Now prepping the real 204-country production
-run:** `input/countries-full.xlsx` (built from `countries list.txt`, 204 countries) reads cleanly, and the
-country-code harvester (`npm run harvest`) is built — it looks each country up on Trade Map's search,
-reads the numeric code from the URL, and confirms via the page heading (no code invented). **Blocker: only
-4/204 codes are known; ~200 must be harvested in one login session before the export can run.** The Trade Map
-country selector is a type-to-search autocomplete (calibrated from `logs/calibration/country-list.*`).
-**⚠️ Git: only Phase 1 is committed — Phases 2–5 are uncommitted on `phase-1-poc`.**
+**Country-code harvester is LIVE-PROVEN and hands-off.** `npm run harvest` seeds a data page, clicks the
+Importer picker open, types each country, and confirms its code via the page heading — no manual clicking,
+no invented codes (the picker is a custom `<app-country-picker>` on a CDK overlay, NOT `<mat-option>`).
+10 real countries confirmed (USA/Germany/UK/Hong Kong China/France/Japan added this session); **194 of 204
+still to harvest.** All Phases 2–5 + the harvester fix are now committed on `phase-1-poc`; build is clean.
+**#1 priority next: run the full harvest, reconcile any spelling mismatches, then the first real 200+ export.**
+Biggest risk to a hands-off full run: session expiry mid-export (Phase 6 auto re-login not built).
 
 ## Next 3
-1. **Harvest codes** — `npm run harvest -- --limit 3` (test), then `npm run harvest` (all ~200), then the first
-   real `npm run export -- --batch --countries input/countries-full.xlsx`. Commit Phases 2–5 first.
-2. Phase 6 — session-expiry pause/resume + query-validation gate polish + `run-report.xlsx` (§28/§31).
+1. **Harvest all remaining codes** — `npm run harvest` (all ~194; one login, leave running). Reconcile any `✗`
+   names via `logs/calibration/picker-open-*.html`, rerun harvest to finish them, then the first real
+   `npm run export -- --batch --countries input/countries-full.xlsx`.
+2. Phase 6 — session-expiry pause/resume (the key enabler for an unattended full export) + query-validation
+   gate polish + `run-report.xlsx` (§28/§31).
 3. Phase 5B / 4B (live, carried) — kill-and-resume demo + one live `--batch` incl. a bogus name; fold into Phase 7.
 
 ## Carried into Phase 3 (from Phase 2)
