@@ -8,8 +8,8 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
 - Install:   `npm install`  then  `npx playwright install chromium`
 - Build:     `npm run build`      (tsc, must compile clean — no errors)
 - Run:       `npm run export -- --country Dominica`   (Phase 1: single country)
-- Lint:      `npm run lint`       (eslint, added in Phase 1)
-- Test:      `npm test`           (vitest; acceptance runs are manual/headed)
+- Lint:      `npm run lint`       (currently `tsc --noEmit`; eslint added later)
+- Test:      acceptance is manual/headed for now; unit tests arrive Phase 3+
 
 ## The 5 conventions this codebase follows
 1. Deterministic only: DOM selectors, roles, labels, URLs, download events, explicit

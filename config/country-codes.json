@@ -1,0 +1,5 @@
+{
+  "_note": "Trade Map ISO-3166 numeric codes. Only values WRITTEN in the PRD are included (Dominica=212, World=000). India/Pakistan/China + full map arrive in Phase 3 after live verification. Do not invent codes.",
+  "World": "000",
+  "Dominica": "212"
+}

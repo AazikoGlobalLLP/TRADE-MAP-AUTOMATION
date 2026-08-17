@@ -1,0 +1,35 @@
+{
+  "tradeMapBaseUrl": "https://www.trademap.org",
+  "outputDirectory": "./output",
+  "browserProfileDir": "./browser-profile",
+  "logsDir": "./logs",
+  "countryCodesFile": "./config/country-codes.json",
+
+  "filters": {
+    "tradeFlow": "imports",
+    "exporter": "world",
+    "exporterCode": "000",
+    "product": "ALL",
+    "viewBy": "exporter",
+    "frequency": "monthly",
+    "source": "mirror",
+    "dataType": "values",
+    "currency": "USD",
+    "view": "table"
+  },
+
+  "datePolicy": {
+    "requestedStart": "200001",
+    "requestedEnd": "202606",
+    "mode": "MAX_WITHIN_REQUESTED_RANGE"
+  },
+
+  "download": {
+    "format": "xlsx",
+    "overwrite": false,
+    "timeoutMs": 300000,
+    "downloadAttempts": 2
+  },
+
+  "filenameTemplate": "{country}_TradeMap_Imports_AllProducts_byExporter_{frequency}_{source}_{start}-{end}_{currency}.{extension}"
+}
