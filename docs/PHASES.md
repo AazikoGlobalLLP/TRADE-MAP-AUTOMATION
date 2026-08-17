@@ -12,27 +12,28 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 1 — Single-country PoC (Dominica) | ✅ DONE — verified live 2026-08-17 |
 | 2 — Config engine + resolver + filename | ✅ DONE — headless AC green 2026-08-17 (live Dominica re-run recommended) |
 | 3 — Range isolation (India→Pakistan→China) | ✅ DONE — headless 29/29 + live 3-file run, truthful effective range 2026-08-17 |
-| 4 — Batch loop + retry + failure evidence | 🟦 4A DONE — headless 22/22 + build clean 2026-08-17 · 4B (live `--batch` run) carried |
-| 5 — Manifest + resume + idempotency + collision | 🟦 5A DONE — headless 24/24 + build clean 2026-08-17 · 5B (live kill/resume) carried |
-| 6 — Session-expiry + query gate + report | ⬜ todo |
-| 7 — 30-country production + acceptance | ⬜ todo |
+| 4 — Batch loop + retry + failure evidence | ✅ DONE — headless 22/22 + live `--batch` proven via 4-country smoke (fresh Dominica SUCCESS) 2026-08-17 |
+| 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
+| 6 — Session-expiry + query gate + report | ⬜ todo (deferred — mitigation is manual rerun; build after first full run informs it) |
+| 7 — Full 204-country production + acceptance | 🟨 NEXT — codes complete (205), naming finalized; first full run not yet executed |
 
 ## Now
-**Country-code harvester is LIVE-PROVEN and hands-off.** `npm run harvest` seeds a data page, clicks the
-Importer picker open, types each country, and confirms its code via the page heading — no manual clicking,
-no invented codes (the picker is a custom `<app-country-picker>` on a CDK overlay, NOT `<mat-option>`).
-10 real countries confirmed (USA/Germany/UK/Hong Kong China/France/Japan added this session); **194 of 204
-still to harvest.** All Phases 2–5 + the harvester fix are now committed on `phase-1-poc`; build is clean.
-**#1 priority next: run the full harvest, reconcile any spelling mismatches, then the first real 200+ export.**
-Biggest risk to a hands-off full run: session expiry mid-export (Phase 6 auto re-login not built).
+**Harvest COMPLETE (205 codes, 0 unresolved) and the live batch pipeline is PROVEN.** A 4-country smoke test
+(`npm run export -- --batch`) downloaded Dominica fresh → `SUCCESS` with a truthful effective range, skipped
+the pre-existing 3, and on rerun skipped all 4 (Dominica at 0 attempts = resume manifest working). The
+filename convention is now country-first + human-readable
+(`Korea-Republic-of__Imports-from-World__AllProducts__2001-03_to_2026-06__Monthly-Mirror-USD.xlsx`). All work
+committed on `phase-1-poc`; build clean; nothing pushed. **#1 priority: run the first full 204-country export.**
+Biggest risk: session expiry mid-run (Phase 6 auto re-login not built) — mitigation is a manual rerun (resume skips done).
 
 ## Next 3
-1. **Harvest all remaining codes** — `npm run harvest` (all ~194; one login, leave running). Reconcile any `✗`
-   names via `logs/calibration/picker-open-*.html`, rerun harvest to finish them, then the first real
-   `npm run export -- --batch --countries input/countries-full.xlsx`.
-2. Phase 6 — session-expiry pause/resume (the key enabler for an unattended full export) + query-validation
-   gate polish + `run-report.xlsx` (§28/§31).
-3. Phase 5B / 4B (live, carried) — kill-and-resume demo + one live `--batch` incl. a bogus name; fold into Phase 7.
+1. **#1 — Run the full 204-country export (Phase 7 production run).** Clear the 4 old-named smoke files + old
+   manifest first, then `npm run export -- --batch --countries input/countries-full.xlsx`. Babysit for a
+   `FAILED` cluster (session expiry) → re-login + rerun the same command; resume continues.
+2. Validate a sample of the 204 output files (open as workbook, correct query, non-empty) + walk the
+   acceptance checklist AC-01…AC-12.
+3. Phase 6 — session-expiry auto pause/resume (makes the full run truly hands-off) + `run-report.xlsx`
+   (§28/§31) + query-validation gate polish. Build it informed by what the first full run actually strained.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress
