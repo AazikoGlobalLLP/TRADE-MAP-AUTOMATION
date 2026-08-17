@@ -21,3 +21,13 @@ Format: date · decision · why · alternative rejected.
   Why: repo-local default avoids writing outside the project during testing (PRD §21).
 - **2026-08-17 · Filenames use the EFFECTIVE range.** Why: name truthfully describes file
   contents (PRD §19). Rejected: requested range in filename.
+- **2026-08-17 · Auth is login-PAGE-driven, not logged-in-guess-driven.** Why: the "am I
+  logged in?" heuristic on the home page failed silently and the run crashed on the login
+  page. We now detect the login page (password field / login URL / "gateway to ITC" banner),
+  PAUSE for manual login + ENTER, then re-navigate. Rejected: guessing session state.
+- **2026-08-17 · PRD §6 canonical URL confirmed correct (Dominica).** Live run landed on
+  `.../imports/c/212/c/000/p/ALL/byPartner/month/200001-202606/mirror/values/USD/table` and
+  exported successfully. URL-navigation is the trusted PRIMARY query mechanism.
+- **2026-08-17 · Effective range read from the URL segment — for FULL_RANGE only so far.**
+  Worked for Dominica. OPEN: a CLIPPED country may keep the requested range in the URL;
+  `readRangeFromDom()` must be built + proven before trusting clipped detection (Phase 3).

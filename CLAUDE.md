@@ -29,6 +29,14 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
   If export is refused, record the failure status and continue. Do not circumvent.
 - Do not automate the user's everyday Chrome — use the dedicated profile only.
 
+## Gotchas (learned the hard way)
+- Handle auth by detecting the LOGIN PAGE (password field / login URL / "gateway to ITC"
+  banner) and pausing — never by guessing "am I logged in?" on the home page. Guessing
+  crashed the first run. See `src/auth/session.ts` `isLoginPage`.
+- PRD §6 canonical URL is confirmed working; a CLIPPED-availability country may keep the
+  requested range in the URL, so don't trust the URL range segment for those — build the
+  DOM readout (`readRangeFromDom`) and prove it in Phase 3 before the isolation test.
+
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.
 

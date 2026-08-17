@@ -6,9 +6,29 @@ sized for incremental delivery. Do phases in order; do not start N+1 until N dem
 
 Legend: **Demo** = the one observable thing that proves the phase is done.
 
+## Status
+| Phase | Status |
+|---|---|
+| 1 — Single-country PoC (Dominica) | ✅ DONE — verified live 2026-08-17 |
+| 2 — Config engine + resolver + filename | ⬜ NEXT |
+| 3 — Range isolation (India→Pakistan→China) | ⬜ todo |
+| 4 — Batch loop + retry + failure evidence | ⬜ todo |
+| 5 — Manifest + resume + idempotency | ⬜ todo |
+| 6 — Session-expiry + query gate + report | ⬜ todo |
+| 7 — 30-country production + acceptance | ⬜ todo |
+
+## Now
+Phase 1 complete. Nothing in progress — session closing.
+
+## Next 3
+1. Phase 2 — config engine + country-code resolver + configurable filename generator.
+2. Phase 3 — build/prove `readRangeFromDom()` and run the India→Pakistan→China isolation
+   test (the core risk: a clipped country must not bleed into the next).
+3. Phase 4 — batch loop over `countries.xlsx` + per-country retry + failure screenshots.
+
 ---
 
-## Phase 1 — Single-country proof of concept (Dominica)  ← START HERE
+## Phase 1 — Single-country proof of concept (Dominica)  ✅ DONE (2026-08-17)
 Scaffold the project, log in once (manual, persistent session), build the canonical
 query for ONE country, detect its effective range, click Save, capture the XLSX,
 save+rename to the configured folder, and validate the file.
@@ -17,7 +37,7 @@ Full locked spec: `docs/spec/phase-1-single-country.md`
 Files: package.json, tsconfig.json, config/config.json, config/country-codes.json,
 src/index.ts, src/trademap/driver.ts, src/auth/session.ts, src/files/save-validate.ts
 
-## Phase 2 — Config engine + country-code resolver + filename generator
+## Phase 2 — Config engine + country-code resolver + filename generator  ← NEXT
 Externalize all filters/dates/paths; ISO-numeric country-code map with UI-search
 fallback; configurable filename template rendered from effective range.
 **Demo:** change `config.json` (dates or filename template) → output filename/range
