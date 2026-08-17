@@ -7,9 +7,16 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "dev":"",
     "build": "tsc",
-    "export": "tsx src/index.ts",
+    "export": "tsc && node dist/index.js",
+    "batch": "tsc && node dist/index.js --batch",
     "start": "node dist/index.js",
+    "calibrate": "tsc && node dist/tools/calibrate-probe.js",
+    "harvest": "tsc && node dist/tools/harvest-codes.js",
+    "test:isolation": "tsx src/orchestrator/isolation-check.ts",
+    "test:batch": "tsx src/orchestrator/batch-check.ts",
+    "test:manifest": "tsx src/manifest/manifest-check.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,11 +1,16 @@
 import { Page, Download } from 'playwright';
+import {
+  EffectiveRange,
+  RangeReadout,
+  parseRange,
+  chooseReadout,
+  computeEffectiveRange,
+  rangeFromColumnClasses,
+} from './rangeEngine';
 
-/** The per-country date window Trade Map actually served (PRD §4B, §16). */
-export interface EffectiveRange {
-  start: string; // YYYYMM
-  end: string; // YYYYMM
-  status: 'FULL_RANGE' | 'CLIPPED_BY_AVAILABILITY';
-}
+// The range logic (status decision, parsing, YYYYMM checks) lives in rangeEngine
+// so it can be proven offline. `EffectiveRange` is re-exported for existing callers.
+export { EffectiveRange } from './rangeEngine';
 
 /** Filter values needed to build the canonical query URL (subset of config.filters). */
 export interface UrlFilters {
@@ -67,11 +72,11 @@ export function buildCanonicalUrl(
 }
 
 /**
- * Verify the page heading names the expected importer (PRD §42). Blocks Save if we are
- * looking at the wrong country. VERIFY heading selector against live DOM.
+ * Collect the page's heading/title text (joined) for importer verification. Shared
+ * by `verifyCountryHeading` and the pre-Save gate in verifyQuery.ts so both read
+ * the heading the same way. VERIFY these selectors against live DOM (Phase 3B).
  */
-export async function verifyCountryHeading(page: Page, countryName: string): Promise<void> {
-  const needle = countryName.toLowerCase();
+export async function readHeadingCandidates(page: Page): Promise<string> {
   const candidates: string[] = [];
 
   const title = await page.title().catch(() => '');
@@ -83,7 +88,16 @@ export async function verifyCountryHeading(page: Page, countryName: string): Pro
     .catch(() => [] as string[]);
   candidates.push(...headingTexts);
 
-  const seen = candidates.join(' | ').trim();
+  return candidates.join(' | ').trim();
+}
+
+/**
+ * Verify the page heading names the expected importer (PRD §42). Blocks Save if we are
+ * looking at the wrong country. VERIFY heading selector against live DOM.
+ */
+export async function verifyCountryHeading(page: Page, countryName: string): Promise<void> {
+  const needle = countryName.toLowerCase();
+  const seen = await readHeadingCandidates(page);
   if (seen.toLowerCase().includes(needle)) {
     return;
   }
@@ -111,20 +125,14 @@ export async function detectEffectiveRange(
   requestedStart: string,
   requestedEnd: string,
 ): Promise<EffectiveRange> {
+  // DOM readout takes precedence over the URL segment: a CLIPPED country may keep
+  // the requested range in its URL (CLAUDE.md gotcha, DECISIONS 2026-08-17), which
+  // would falsely read as FULL_RANGE. chooseReadout + computeEffectiveRange (pure,
+  // in rangeEngine) own that precedence and the FULL/CLIPPED decision.
+  const fromDom = await readShownRange(page);
   const fromUrl = parseRange(page.url());
-  const fromDom = fromUrl ? null : await readRangeFromDom(page);
-  const parsed = fromUrl ?? fromDom;
-  if (!parsed) {
-    throw new Error(
-      'DATE_ERROR: could not read the effective range from the URL or DOM. ' +
-        'Calibrate readRangeFromDom() in driver.ts against the live Trade Map range control.',
-    );
-  }
-  const status: EffectiveRange['status'] =
-    parsed.start === requestedStart && parsed.end === requestedEnd
-      ? 'FULL_RANGE'
-      : 'CLIPPED_BY_AVAILABILITY';
-  return { start: parsed.start, end: parsed.end, status };
+  const chosen = chooseReadout(fromDom, fromUrl);
+  return computeEffectiveRange({ requestedStart, requestedEnd }, chosen);
 }
 
 /**
@@ -141,29 +149,45 @@ export async function triggerSaveAndDownload(page: Page, timeoutMs: number): Pro
 }
 
 async function clickSave(page: Page): Promise<void> {
-  const saveButton = page
-    .locator('button:has-text("Save"), a:has-text("Save"), [title*="Save" i], [aria-label*="Save" i]')
-    .first();
+  // The EXPORT Save is a Material menu trigger labelled EXACTLY "Save" (calibrated
+  // 2026-08-17). A separate "Save query" button also exists and appears FIRST in the
+  // DOM — the old `:has-text("Save").first()` would have clicked the wrong one.
+  let saveButton = page.getByRole('button', { name: 'Save', exact: true }).first();
+  if (!(await saveButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+    saveButton = page.locator('button.mat-mdc-menu-trigger', { hasText: 'Save' }).first();
+  }
   await saveButton.click();
-  const xlsxOption = page.getByText(/xlsx|excel/i).first();
-  if (await xlsxOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await xlsxOption.click();
+
+  // Save opens a Material menu of export formats; pick the XLSX/Excel item.
+  const xlsxItem = page.getByRole('menuitem', { name: /xlsx|excel/i }).first();
+  if (await xlsxItem.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await xlsxItem.click();
+    return;
+  }
+  const xlsxText = page.getByText(/xlsx|excel/i).first();
+  if (await xlsxText.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await xlsxText.click();
   }
 }
 
-/** Read a "NNNNNN-NNNNNN" month range out of a URL, if present. */
-function parseRange(url: string): { start: string; end: string } | null {
-  const m = url.match(/(\d{6})-(\d{6})/);
-  return m ? { start: m[1], end: m[2] } : null;
-}
-
 /**
- * DOM fallback for the effective range. Returns null until calibrated against the live
- * range control (start/end month selects or the visible "Jan 2000 – Jun 2026" label).
+ * Read the EFFECTIVE served range from the data table's month columns. This is the
+ * trusted source for CLIPPED detection (the URL can lie for a reduced-availability
+ * country). CALIBRATED 2026-08-17: each month header cell carries a
+ * `mat-column-YYYYMM` class; the served window is min→max of those tokens.
+ *
+ * Uses locator `getAttribute` (no `page.evaluate`) so it runs identically under
+ * `tsx` and compiled `node`. Returns null when no month column is found → a loud
+ * DATE_ERROR upstream rather than a silent wrong range.
  */
-async function readRangeFromDom(_page: Page): Promise<{ start: string; end: string } | null> {
-  // TODO(Phase 1 live calibration): read the real range control here, e.g. two <select>
-  // month/year pairs, and normalise to YYYYMM. Returning null forces an explicit
-  // DATE_ERROR rather than a silent wrong range.
-  return null;
+export async function readShownRange(page: Page): Promise<RangeReadout | null> {
+  const cells = page.locator('.mat-mdc-header-cell.col-year');
+  const n = await cells.count().catch(() => 0);
+  if (n === 0) return null;
+  const classAttrs: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const cls = await cells.nth(i).getAttribute('class').catch(() => null);
+    if (cls) classAttrs.push(cls);
+  }
+  return rangeFromColumnClasses(classAttrs);
 }

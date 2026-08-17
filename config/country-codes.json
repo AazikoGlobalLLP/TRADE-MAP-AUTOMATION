@@ -1,5 +1,8 @@
 {
-  "_note": "Trade Map ISO-3166 numeric codes. Only values WRITTEN in the PRD are included (Dominica=212, World=000). India/Pakistan/China + full map arrive in Phase 3 after live verification. Do not invent codes.",
+  "_note": "Trade Map (UN-Comtrade) numeric codes. Each value is CONFIRMED from a real logged-in Trade Map URL (…/c/<code>/…), never invented — note India=699 (Comtrade), NOT ISO-3166 356. Confirmed 2026-08-17: Pakistan=586, India=699, China=156.",
   "World": "000",
-  "Dominica": "212"
+  "Dominica": "212",
+  "Pakistan": "586",
+  "India": "699",
+  "China": "156"
 }

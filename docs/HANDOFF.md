@@ -1,47 +1,56 @@
-# HANDOFF — Trade Map Automated Export System — Phase 1 — 2026-08-17
+# HANDOFF — Trade Map Automated Export System — Phase 5A + code-harvest prep — 2026-08-17
 
 ## Done
-- Phase 1 works end-to-end on a real Trade Map login. One command exports one country.
-- Verified live: `npm run export -- --country Dominica` produced a 369 KB
-  `Dominica_TradeMap_Imports_AllProducts_byExporter_Monthly_Mirror_200001-202606_USD.xlsx`
-  in `./output`, status SUCCESS, effective range `200001-202606` (FULL_RANGE).
-- Manual-login flow works: script pauses on the login page, waits for ENTER, resumes;
-  session persists in `browser-profile/` so later runs don't re-prompt.
-- The PRD §6 canonical URL is CORRECT as built (log `auth.ok` landed on the exact URL).
-- URL-based effective-range detection works; XLSX validation (ZIP magic bytes + workbook
-  open) passed on the real file.
+- **Phase 5A code-complete and green offline.** `npm run test:manifest` → **24/24**, `npm run build`
+  clean (tsc, 0 errors), no regression: `npm run test:isolation` **29/29**, `npm run test:batch` **22/22**.
+  Resume manifest (atomic `manifests/latest-run.json`), pre-download idempotency skip (§36, re-validates the
+  file on disk), collision modes `skip|overwrite|version`, and `--force` (ignore manifest + overwrite) all work.
+- **204-country production list is loaded and readable.** `input/countries-full.xlsx` was generated from
+  `countries list.txt` (leading serial number + the trailing `y` flag stripped); the batch reader parses all
+  **204** names cleanly (no dupes, no bad rows).
+- **Country-code harvester built + compiles.** `npm run harvest` (`src/tools/harvest-codes.ts`) uses Trade
+  Map's own top search box to look up each country, reads the numeric code from the resulting URL, and
+  CONFIRMS it against the live page heading — no code is ever invented. Resume-safe + incremental (writes
+  `config/country-codes.json` atomically after each confirmation; a rerun skips already-known codes).
+- **Country-selector calibrated from a live capture** (`logs/calibration/country-list.*`): the selector is a
+  type-to-search **autocomplete** (no native `<select>`, so the full list is never in the DOM at once). The
+  search input is `input[placeholder^="Type (min 2 characters)"]`, results are `<mat-option>`, and the
+  selected country's code appears in the URL (`…/c/<code>/…`). Codes are **UN-Comtrade** (e.g. Algeria=012,
+  USA=842, France=251), not always ISO — confirmed live, e.g. heading "Algeria's imports from World".
+- **Plain-language project overview published** as an Artifact (visual "what does it do" one-pager).
 
-## Files changed (Phase 1)
-- package.json, tsconfig.json — Node 20 + TS 5 strict, CommonJS; `build`/`export`/`lint`.
-- config/config.json — all filters/dates/path/template/auth knobs (nothing hardcoded).
-- config/country-codes.json — only PRD-written codes: World=000, Dominica=212.
-- src/auth/session.ts — persistent profile launch + login-PAGE detection + ENTER pause.
-- src/trademap/driver.ts — canonical-URL builder, heading gate, effective-range detect,
-  Save→download capture.
-- src/files/save-validate.ts — filename render, saveAs, 5-check XLSX validation.
-- src/index.ts — orchestrator: requested-range → query → auth → verify → range → export
-  → validate; `gotoAuthenticated` login loop.
+## Files changed (this session)
+- input/countries-full.xlsx — NEW: the 204-country production list (col A). The proven 4-country
+  `input/countries.xlsx` fixture is UNTOUCHED so `test:batch` stays 22/22.
+- src/tools/harvest-codes.ts — NEW: country-code harvester (search → URL code → heading confirm; resume-safe).
+- src/manifest/{manifest,resume,manifest-check}.ts, src/files/collision.ts — NEW (Phase 5A, see prior handoff).
+- src/orchestrator/runBatch.ts, src/files/save-validate.ts, src/orchestrator/runCountry.ts, src/index.ts,
+  src/config/schema.ts, config/config.json — Phase 5A wiring (manifest/idempotency/collision/`--force`).
+- package.json — added `harvest` + `test:manifest` scripts (note: user added an empty `"dev": ""` — harmless).
+- docs/spec/phase-5-manifest-resume-collision.md — NEW spec lock. DECISIONS/GLOSSARY/PHASES/PROJECT_MAP/STATUS updated.
+- logs/calibration/country-list.* — live capture (gitignored) used to calibrate the search selector.
 
 ## Decisions made
-- Auth is LOGIN-PAGE-driven, not "am-I-logged-in?"-guess-driven (the guess was the bug).
-- Canonical URL from PRD §6 is trusted as PRIMARY (verified live for Dominica).
-- Effective range read from the URL's `NNNNNN-NNNNNN` segment (worked for a FULL_RANGE
-  country); DOM fallback still a stub — see below.
+- Harvest codes from Trade Map's own search (autocomplete → URL code → heading confirm), NOT from a bulk
+  dropdown (there isn't one) and NOT from ISO/memory (Trade Map uses Comtrade codes). Every code confirmed live.
+- Production list lives in a SEPARATE file (`countries-full.xlsx`) so the 4-country test fixture — and the
+  offline `test:batch` that pins it — never regress. Full run uses `--countries input/countries-full.xlsx`.
+- Phase 5 split 5A (built, offline-proven) + 5B (live, carried) — same 3B/4B pattern.
 
 ## Known broken / deliberately skipped
-- `readRangeFromDom()` is still a stub — because the only country tested (Dominica) was
-  FULL_RANGE, so the URL segment sufficed. A CLIPPED country (e.g. Pakistan) may keep the
-  requested range in the URL; the DOM readout must be built and proven in Phase 3.
-- India/Pakistan/China codes NOT in country-codes.json — because their numeric codes were
-  not written in the PRD; add them (verified) in Phase 3.
-- No batch loop / manifest / resume / retry-per-country / screenshots — later phases.
-- No git remote configured, so nothing is pushed.
+- **⚠️ GIT: only Phase 1 is committed.** All of Phases 2–5 + this session's work are UNCOMMITTED on branch
+  `phase-1-poc` (safe on disk; `/clear` will not lose them). Needs a commit + a proper branch before it's "real".
+- **~200 country codes NOT yet harvested** — only 4/204 known (Dominica, India, Pakistan, China). Needs one
+  login session: run the harvester. Until then a full 204 run would fail ~200 countries.
+- **Full 204-country export has NEVER run** — 0 real output files for the production list yet.
+- **5B (live resume demo) + 4B (live batch) carried** — logic proven offline, live confirmation pending.
+- **Phase 6 (mid-run re-login + run-report.xlsx) and Phase 7 (production hardening + final acceptance) — to do.**
+- Harvester autocomplete interaction is a FIRST version — may need a timing/selector tweak after the 3-country test.
 
 ## Next session starts here
-- Phase 2: Config engine + country-code resolver (name → ISO numeric, UI-search fallback)
-  + configurable filename generator — externalize/verify what Phase 1 hardcoded lightly.
-- First command: `git checkout main && git merge phase-1-poc` (land Phase 1), then start
-  Phase 2 on a new branch; or continue on `phase-1-poc` if not merging yet.
-- Watch out for: the CLIPPED-range case. Do NOT trust the URL segment alone for a
-  reduced-availability country — build and prove `readRangeFromDom()` before Phase 3’s
-  India→Pakistan→China isolation test (this is the core project risk, PRD §39/AC-01).
+- **Harvest the country codes** (the immediate blocker), then run the first real 204-country export.
+- First command: `npm run harvest -- --limit 3`  (a 3-country test; login once, then paste the ✓/✗ output).
+  If clean → `npm run harvest` (all ~200), then `npm run export -- --batch --countries input/countries-full.xlsx`.
+- Watch out for: the harvester's autocomplete step is unproven live — if the 3-country test shows ✗ (no options,
+  or wrong option picked for ambiguous names like "Congo"), fix the `mat-option` match/timing in harvest-codes.ts
+  BEFORE running all 200. And commit the uncommitted Phases 2–5 work.

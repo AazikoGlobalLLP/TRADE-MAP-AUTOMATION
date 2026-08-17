@@ -33,9 +33,24 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
 - Handle auth by detecting the LOGIN PAGE (password field / login URL / "gateway to ITC"
   banner) and pausing — never by guessing "am I logged in?" on the home page. Guessing
   crashed the first run. See `src/auth/session.ts` `isLoginPage`.
-- PRD §6 canonical URL is confirmed working; a CLIPPED-availability country may keep the
-  requested range in the URL, so don't trust the URL range segment for those — build the
-  DOM readout (`readRangeFromDom`) and prove it in Phase 3 before the isolation test.
+- EFFECTIVE RANGE COMES FROM THE DOWNLOADED FILE, never the DOM/URL. The new Trade Map beta does
+  NOT clip columns — it renders the full requested range and pads unavailable months with `0`. So
+  the DOM/URL month span is ALWAYS the requested range and will lie (false FULL_RANGE). Read the
+  real range from the workbook (`readEffectiveRangeFromWorkbook` → first→last non-zero month).
+- Trade Map codes are UN-COMTRADE numbers, NOT ISO-3166 (India=699, not 356; Pakistan=586,
+  China=156, Dominica=212 happen to match; USA=842 not 840; France=251 not 250). Confirm every
+  new code from a real logged-in URL (`…/c/<code>/…`) — never invent, never assume ISO. To add
+  many codes, run `npm run harvest` (`src/tools/harvest-codes.ts`): it types each country into
+  Trade Map's search, reads the code from the URL, and confirms it against the page heading.
+- The country selector is a type-to-search AUTOCOMPLETE (no native `<select>`, so the full country
+  list is NEVER in the DOM at once). Search input `placeholder^="Type (min 2 characters)"`, results
+  are `<mat-option>`, selected code appears in the URL. Don't try to scrape a bulk dropdown — there isn't one.
+- Filters are Angular-Material components with NO native `<select>`. Read/verify filters from the
+  canonical URL (`parseFiltersFromUrl`), not the DOM. The export Save is the mat-menu button labelled
+  exactly "Save" (a separate "Save query" button exists and comes first in the DOM).
+- Any browser script that uses `page.evaluate` MUST run compiled (`node dist/...`), not `tsx`:
+  esbuild injects a `__name` helper that is undefined in the browser → `ReferenceError`. `export`
+  and `calibrate` npm scripts already do `tsc && node dist/...`.
 
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.

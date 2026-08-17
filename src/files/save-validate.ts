@@ -2,38 +2,43 @@ import * as fs from 'fs';
 import * as path from 'path';
 import ExcelJS from 'exceljs';
 import { Download } from 'playwright';
+import { CollisionMode, resolveCollision } from './collision';
 
-/** Render the filename template (PRD §19–20). Unknown tokens are left untouched. */
-export function generateFilename(template: string, tokens: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (whole, key: string) =>
-    Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : whole,
-  );
-}
+// Filename generation moved to ./filename in Phase 2 (single source of truth).
 
 export interface SaveResult {
-  saved: boolean; // false = skipped due to existing file + overwrite:false
-  targetPath: string;
+  saved: boolean; // false = skipped because the file exists and mode is `skip`
+  targetPath: string; // final absolute path (may be a `_vN` variant under `version` mode)
+  filename: string; // final filename only (versioned if applicable)
+  versioned: boolean; // true iff `version` mode picked a `_vN` name
 }
 
 /**
  * Persist the captured download to the target folder under the generated name (PRD §18, §37).
- * Default collision behavior is skip-not-overwrite; versioning arrives in Phase 5.
+ * Collision handling (Phase 5) is decided by the pure `resolveCollision`, keyed on the EFFECTIVE
+ * filename (only known after download — DECISIONS 2026-08-17):
+ *   • skip      → the file exists → do not overwrite, return { saved:false }.
+ *   • overwrite → save over the existing file.
+ *   • version   → save under the first free `<name>_vN.xlsx`.
+ * The PRE-download idempotency skip is separate (src/manifest/resume.ts).
  */
 export async function saveDownload(
   download: Download,
   outputDirectory: string,
   filename: string,
-  overwrite: boolean,
+  mode: CollisionMode,
 ): Promise<SaveResult> {
   const dir = path.resolve(outputDirectory);
   fs.mkdirSync(dir, { recursive: true });
-  const targetPath = path.join(dir, filename);
 
-  if (fs.existsSync(targetPath) && !overwrite) {
-    return { saved: false, targetPath };
+  const decision = resolveCollision(filename, mode, (name) => fs.existsSync(path.join(dir, name)));
+  const targetPath = path.join(dir, decision.finalName);
+
+  if (decision.action === 'skip') {
+    return { saved: false, targetPath, filename: decision.finalName, versioned: false };
   }
   await download.saveAs(targetPath);
-  return { saved: true, targetPath };
+  return { saved: true, targetPath, filename: decision.finalName, versioned: decision.versioned };
 }
 
 /**

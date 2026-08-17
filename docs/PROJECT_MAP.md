@@ -27,7 +27,7 @@ AAZIKO-AUTOMATION/
 │   ├── input/                  [P4] readCountries.ts
 │   ├── orchestrator/           [P3] runCountry.ts · [P4] runBatch.ts, retry.ts
 │   ├── evidence/               [P4] captureFailure.ts (screenshots)
-│   ├── manifest/               [P5] manifest.ts, resume.ts
+│   ├── manifest/               [P5] manifest.ts, resume.ts, manifest-check.ts (test:manifest)
 │   ├── report/                 [P6] runReport.ts (run-report.xlsx)
 │   └── logging/                [P7] logger.ts
 │

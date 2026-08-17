@@ -1,34 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Page } from 'playwright';
-import { launchSession, isLoginPage, promptManualLogin } from './auth/session';
-import {
-  buildCanonicalUrl,
-  verifyCountryHeading,
-  detectEffectiveRange,
-  triggerSaveAndDownload,
-  UrlFilters,
-} from './trademap/driver';
-import { generateFilename, saveDownload, validateXlsx } from './files/save-validate';
-
-// ---------------------------------------------------------------------------
-// Config shape (parsed from config/config.json — nothing hardcoded, PRD §13/§20).
-// ---------------------------------------------------------------------------
-interface FiltersConfig extends UrlFilters {
-  exporter: string;
-}
-interface AppConfig {
-  tradeMapBaseUrl: string;
-  outputDirectory: string;
-  browserProfileDir: string;
-  logsDir: string;
-  countryCodesFile: string;
-  filters: FiltersConfig;
-  auth?: { maxLoginAttempts?: number };
-  datePolicy: { requestedStart: string; requestedEnd: string; mode: string };
-  download: { format: string; overwrite: boolean; timeoutMs: number; downloadAttempts: number };
-  filenameTemplate: string;
-}
+import { launchSession } from './auth/session';
+import { AppConfig } from './config/schema';
+import { loadConfig } from './config/loadConfig';
+import { RequestedRange } from './trademap/rangeEngine';
+import { runCountry, Logger } from './orchestrator/runCountry';
+import { readCountries } from './input/readCountries';
+import { runBatch, renderSummaryTable } from './orchestrator/runBatch';
 
 // ---------------------------------------------------------------------------
 // Tiny CLI arg reader: --key value
@@ -38,10 +16,14 @@ function getArg(name: string): string | undefined {
   return idx >= 0 && idx + 1 < process.argv.length ? process.argv[idx + 1] : undefined;
 }
 
+/** Boolean flag: present anywhere in argv (e.g. `--batch`). */
+function hasFlag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 // ---------------------------------------------------------------------------
 // Structured logger. JSON lines to stdout + logs/runs/<runId>.log. Never logs secrets.
 // ---------------------------------------------------------------------------
-type Logger = (level: 'info' | 'warn' | 'error', event: string, data?: Record<string, unknown>) => void;
 function makeLogger(logFile: string): Logger {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   return (level, event, data = {}) => {
@@ -51,142 +33,63 @@ function makeLogger(logFile: string): Logger {
   };
 }
 
-const cap = (s: string): string => (s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-
-/**
- * Navigate to the query URL and ensure we land on the DATA page, not the login page.
- * On a login redirect (first run or expired session, PRD §22/§28) we pause for a manual
- * login and re-navigate — up to maxLoginAttempts — instead of crashing on the login page.
- */
-async function gotoAuthenticated(
-  page: Page,
-  url: string,
-  maxLoginAttempts: number,
-  log: Logger,
-): Promise<void> {
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle').catch(() => undefined);
-
-  let attempts = 0;
-  while (await isLoginPage(page)) {
-    attempts += 1;
-    if (attempts > maxLoginAttempts) {
-      throw new Error(
-        `LOGIN_REQUIRED: still on the Trade Map login page after ${maxLoginAttempts} manual attempt(s).`,
-      );
-    }
-    log('warn', 'auth.login_required', { attempt: attempts, url: page.url() });
-    await promptManualLogin();
-    // Re-navigate to the real query URL now that the user has (hopefully) logged in.
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('networkidle').catch(() => undefined);
-  }
-  log('info', 'auth.ok', { url: page.url() });
-}
-
 async function main(): Promise<void> {
+  const batchMode = hasFlag('batch');
+  const force = hasFlag('force'); // Phase 5 (§36): ignore the resume manifest + overwrite existing files
   const country = getArg('country') ?? 'Dominica';
   const runId = getArg('run-id') ?? new Date().toISOString().replace(/[:.]/g, '-');
   const configPath = getArg('config') ?? path.resolve('config/config.json');
 
-  const config: AppConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const config: AppConfig = loadConfig(configPath);
   const log = makeLogger(path.join(config.logsDir, 'runs', `${runId}.log`));
-  log('info', 'run.start', { runId, country, mode: config.datePolicy.mode });
+  log('info', 'run.start', {
+    runId,
+    mode: config.datePolicy.mode,
+    ...(force ? { force: true } : {}),
+    ...(batchMode ? { batch: true } : { country }),
+  });
 
-  // Resolve the country to its Trade Map numeric code (PRD §7). Phase 1: must exist in the
-  // local map; the UI-search fallback is Phase 2.
+  // Load the local country-code map (PRD §7). Resolution runs AFTER the browser launches
+  // so the UI-search fallback (name not in the map) has a live page to search on.
   const codes: Record<string, string> = JSON.parse(
     fs.readFileSync(path.resolve(config.countryCodesFile), 'utf8'),
   );
-  const importerCode = codes[country];
-  if (!importerCode) {
-    throw new Error(
-      `COUNTRY_NOT_FOUND: "${country}" is not in ${config.countryCodesFile} ` +
-        `(Phase 2 adds the UI-search fallback).`,
-    );
-  }
 
-  const { requestedStart, requestedEnd } = config.datePolicy;
+  // The GLOBAL requested range is immutable for the whole run (PRD §4A, convention #2).
+  // Freeze it so no per-country job can mutate it — the isolation guarantee is structural,
+  // not just a comment. runCountry() receives it by value and only ever reads it.
+  const global: RequestedRange = Object.freeze({
+    requestedStart: config.datePolicy.requestedStart,
+    requestedEnd: config.datePolicy.requestedEnd,
+  });
+
+  // In batch mode, read + normalise the ordered country list BEFORE launching the
+  // browser, so a bad/empty input file fails fast (exit 2) without a browser.
+  const inputFile = getArg('countries') ?? config.batch.inputFile;
+  const countries = batchMode ? await readCountries(path.resolve(inputFile), log) : [];
 
   const { context, page } = await launchSession(config.browserProfileDir, config.tradeMapBaseUrl);
   try {
-    // Build the canonical query URL from the GLOBAL requested range (never a carried-over
-    // value) and navigate deterministically (PRD §4A, §6, §15). If Trade Map bounces us to
-    // its login page, PAUSE for a manual login and re-navigate — never crash on it.
-    const url = buildCanonicalUrl(
-      config.tradeMapBaseUrl,
-      importerCode,
-      config.filters,
-      requestedStart,
-      requestedEnd,
-    );
-    log('info', 'query.navigate', { country, importerCode, url });
-    await gotoAuthenticated(page, url, config.auth?.maxLoginAttempts ?? 3, log);
-
-    // Country verification gate before anything else (PRD §42).
-    await verifyCountryHeading(page, country);
-
-    // Effective range = what Trade Map actually served (PRD §16). Requested is immutable.
-    const eff = await detectEffectiveRange(page, requestedStart, requestedEnd);
-    log('info', 'range.detected', {
-      country,
-      requested: `${requestedStart}-${requestedEnd}`,
-      effective: `${eff.start}-${eff.end}`,
-      rangeStatus: eff.status,
-    });
-
-    // Generate the target filename BEFORE export, using the EFFECTIVE range (PRD §19).
-    const filename = generateFilename(config.filenameTemplate, {
-      country,
-      frequency: cap(config.filters.frequency),
-      source: cap(config.filters.source),
-      currency: config.filters.currency,
-      start: eff.start,
-      end: eff.end,
-      extension: config.download.format,
-    });
-
-    // Collision short-circuit (PRD §37): if the file already exists and overwrite is off,
-    // skip before triggering a redundant download.
-    const targetPath = path.join(path.resolve(config.outputDirectory), filename);
-    if (fs.existsSync(targetPath) && !config.download.overwrite) {
-      log('info', 'file.skip', { country, targetPath, reason: 'exists and overwrite:false' });
-      log('info', 'run.done', { country, status: 'SKIPPED', file: filename });
+    if (batchMode) {
+      // Phase 4: sequential batch over runCountry() with per-country retry + failure evidence.
+      // Phase 5: resume manifest + idempotency skip + collision modes (`force` bypasses the skip).
+      const summary = await runBatch(page, countries, global, config, codes, log, runId, undefined, force);
+      process.stdout.write('\n' + renderSummaryTable(summary) + '\n');
+      process.exitCode = summary.exitCode; // 0 all ok · 1 any FAILED · 2 aborted/empty
       return;
     }
 
-    // Trigger Save + capture download, with the configured retry count (PRD §18, §26–27).
-    let download;
-    let lastErr: unknown;
-    for (let attempt = 1; attempt <= config.download.downloadAttempts; attempt++) {
-      try {
-        log('info', 'export.attempt', { country, attempt });
-        download = await triggerSaveAndDownload(page, config.download.timeoutMs);
-        break;
-      } catch (e) {
-        lastErr = e;
-        log('warn', 'export.attempt_failed', { country, attempt, error: String(e) });
-      }
-    }
-    if (!download) {
-      throw new Error(`DOWNLOAD_TIMEOUT: all ${config.download.downloadAttempts} attempts failed (${String(lastErr)})`);
-    }
-
-    // Save under the target path, then validate before declaring success (PRD §25, AC-09).
-    const result = await saveDownload(download, config.outputDirectory, filename, config.download.overwrite);
-    if (!result.saved) {
-      log('info', 'file.skip', { country, targetPath: result.targetPath, reason: 'exists and overwrite:false' });
-      log('info', 'run.done', { country, status: 'SKIPPED', file: filename });
-      return;
-    }
-    await validateXlsx(result.targetPath);
-
+    // Single-country path (unchanged from Phase 3): `npm run export -- --country X`.
+    // `--force` still forces overwrite here (there is no manifest in single-country mode).
+    const result = await runCountry(page, country, global, config, codes, log, {
+      collisionMode: force ? 'overwrite' : undefined,
+    });
     log('info', 'run.done', {
-      country,
-      status: 'SUCCESS',
-      requestedRange: `${requestedStart}-${requestedEnd}`,
-      effectiveRange: `${eff.start}-${eff.end}`,
-      rangeStatus: eff.status,
+      country: result.country,
+      status: result.status,
+      requestedRange: result.requestedRange,
+      effectiveRange: result.effectiveRange,
+      rangeStatus: result.rangeStatus,
       file: result.targetPath,
     });
   } finally {
@@ -197,6 +100,9 @@ async function main(): Promise<void> {
 main().catch((err: unknown) => {
   // One consistent failure surface: log, then exit non-zero so no false SUCCESS (AC-09).
   const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(JSON.stringify({ ts: new Date().toISOString(), level: 'error', event: 'run.failed', error: message }) + '\n');
-  process.exitCode = 1;
+  process.stderr.write(
+    JSON.stringify({ ts: new Date().toISOString(), level: 'error', event: 'run.failed', error: message }) + '\n',
+  );
+  // A bad/empty batch input file is an abort (exit 2), not a run failure (exit 1) — spec row 3.
+  process.exitCode = /BATCH_EMPTY|BATCH_INPUT_MISSING/.test(message) ? 2 : 1;
 });

@@ -1,0 +1,204 @@
+2	United States of America	y
+3	China	y
+4	Germany	y
+5	United Kingdom	y
+6	Hong Kong, China	y
+7	France	y
+8	Japan	y
+9	India	y
+10	Italy	y
+11	Mexico	y
+12	Netherlands	y
+13	Korea, Republic of	y
+14	Canada	y
+15	Belgium	y
+16	Switzerland	y
+17	Singapore	y
+18	Spain	y
+19	Chinese Taipei	y
+20	Poland	y
+21	Türkiye	y
+22	Thailand	y
+23	Malaysia	y
+24	Australia	y
+25	Brazil	y
+26	Saudi Arabia	y
+27	Czech Republic	y
+28	Indonesia	y
+29	Austria	y
+30	Sweden	y
+31	Ireland	y
+32	Hungary	y
+33	Romania	y
+34	Philippines	y
+35	Denmark	y
+36	Portugal	y
+37	Slovakia	y
+38	Norway	y
+39	South Africa	y
+40	Egypt	y
+41	Israel	y
+42	Greece	y
+43	Morocco	y
+44	Chile	y
+45	Finland	y
+46	Slovenia	y
+47	Argentina	y
+48	Colombia	y
+49	Pakistan	y
+50	Kazakhstan	y
+51	Peru	y
+52	Bulgaria	y
+53	Croatia	y
+54	Lithuania	y
+55	New Zealand	y
+56	Serbia	y
+57	Oman	y
+58	Guatemala	y
+59	Cambodia	y
+60	Ecuador	y
+61	Dominican Republic	y
+62	Luxembourg	y
+63	Latvia	y
+64	Panama	y
+65	Estonia	y
+66	Costa Rica	y
+67	Azerbaijan	y
+68	Kenya	y
+69	Sri Lanka	y
+70	Côte d'Ivoire	y
+71	Paraguay	y
+72	Uganda	y
+73	El Salvador	y
+74	Bosnia and Herzegovina	y
+75	Angola	y
+76	Tanzania, United Republic of	y
+77	Cyprus	y
+78	Macao, China	y
+79	Congo, Democratic Republic of the	y
+80	Georgia	y
+81	Zambia	y
+82	Uruguay	y
+83	Armenia	y
+84	Nicaragua	y
+85	Kyrgyzstan	y
+86	Senegal	y
+87	Mongolia	y
+88	Iceland	y
+89	Moldova, Republic of	y
+90	Zimbabwe	y
+91	Bolivia, Plurinational State of	y
+92	Guyana	y
+93	Mozambique	y
+94	Malta	y
+95	Namibia	y
+96	Jamaica	y
+97	Burkina Faso	y
+98	Mauritius	y
+99	Brunei Darussalam	y
+100	Mauritania	y
+101	Trinidad and Tobago	y
+102	Rwanda	y
+103	Madagascar	y
+104	Bahamas	y
+105	Malawi	y
+106	Benin	y
+107	Maldives	y
+108	Togo	y
+109	Fiji	y
+110	Liberia	y
+111	Barbados	y
+112	Suriname	y
+113	Niger	y
+114	Bhutan	y
+115	Faroe Islands	y
+116	Seychelles	y
+117	Belize	y
+118	Burundi	y
+119	Cabo Verde	y
+120	South Sudan	y
+121	Samoa	y
+122	Comoros	y
+123	Sao Tome and Principe	y
+124	Saint Kitts and Nevis	y
+125	Anguilla	y
+126	Saint Lucia	y
+127	Saint Pierre and Miquelon	y
+128	Saint Vincent and the Grenadines	y
+129	Sierra Leone	y
+130	Viet Nam	y
+131	Sudan	y
+132	Sudan (before 2012)	y
+133	Eswatini	y
+134	Tonga	y
+135	Syrian Arab Republic	y
+136	Tajikistan	y
+137	United Arab Emirates	y
+138	Tunisia	y
+139	Turks and Caicos Islands	y
+140	Tuvalu	y
+141	Yemen	y
+142	Serbia and Montenegro	y
+143	Uzbekistan	y
+144	Venezuela, Bolivarian Republic of	y
+145	Ukraine	y
+146	Macedonia, North	y
+147	Mayotte	y
+148	Congo	y
+149	Cook Islands	y
+150	Dominica	y
+151	Cuba	
+152	Ethiopia	
+153	Eritrea	
+154	Gambia	
+155	Palestine, State of	
+156	French Polynesia	
+157	Djibouti	
+158	Gabon	
+159	Cayman Islands	
+160	Central African Republic	
+161	Belarus	
+162	Cameroon	
+163	Solomon Islands	
+164	Myanmar	
+165	Botswana	
+166	Bermuda	
+167	Bahrain	
+168	Bangladesh	
+169	Antigua and Barbuda	
+170	Afghanistan	
+171	Albania	
+172	Algeria	
+173	Andorra	
+174	Nigeria	
+175	Papua New Guinea	
+176	Micronesia, Federated States of	
+177	Palau	
+178	Russian Federation	
+179	Guinea-Bissau	
+180	Timor-Leste	
+181	Qatar	
+182	Montenegro	
+183	Montserrat	
+184	Nepal	
+185	Netherlands Antilles	
+186	Curaçao	
+187	Aruba	
+188	New Caledonia	
+189	Vanuatu	
+190	Libya, State of	
+191	Mali	
+192	Lao People's Democratic Republic	
+193	Lebanon	
+194	Lesotho	
+195	Jordan	
+196	Kuwait	
+197	Iran, Islamic Republic of	
+198	Iraq	
+199	Haiti	
+200	Honduras	
+201	Guinea	
+202	Greenland	
+203	Grenada	
+204	Ghana	
+205	Kiribati	
