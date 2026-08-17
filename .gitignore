@@ -1,0 +1,25 @@
+# --- Security: NEVER commit authenticated session state (PRD §43) ---
+.auth/
+browser-profile/
+*.storageState.json
+config/local.json
+
+# Secrets
+.env
+.env.*
+
+# Build / deps
+node_modules/
+dist/
+
+# Run outputs (local artifacts, not source)
+output/
+logs/
+screenshots/
+manifests/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
