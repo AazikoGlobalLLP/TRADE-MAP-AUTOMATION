@@ -80,6 +80,40 @@ export const DEFAULT_INTERACTIVE_FILENAME_TEMPLATE =
 export const DATASET_UNSUPPORTED_MESSAGE = 'DATASET_UNSUPPORTED: only Time series is available in this version';
 
 /**
+ * PURE. A short, filesystem-safe slug of the query IDENTITY the answers select —
+ * everything that changes the exported CONTENT or filename: flow · viewBy ·
+ * frequency · source · dataType · currency. Range is deliberately excluded: the
+ * resume check already guards on requestedRange, so it need not be in the path.
+ */
+export function queryIdentitySlug(answers: RunPlanAnswers): string {
+  return [
+    answers.tradeFlow,
+    answers.viewBy,
+    answers.frequency,
+    answers.dataSource,
+    answers.dataType,
+    answers.currency,
+  ]
+    .map((s) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+    .join('-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * PURE. Insert the query-identity slug before a path's extension so DIFFERENT
+ * queries never share a resume manifest / run report (spec row 18). e.g.
+ * `./manifests/latest-run.json` → `./manifests/latest-run.exports-exporter-monthly-mirror-values-usd.json`.
+ * A path with no extension just gets `.slug` appended.
+ */
+export function scopePathByQuery(filePath: string, answers: RunPlanAnswers): string {
+  const slug = queryIdentitySlug(answers);
+  const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const dot = filePath.lastIndexOf('.');
+  if (dot > lastSep) return `${filePath.slice(0, dot)}.${slug}${filePath.slice(dot)}`;
+  return `${filePath}.${slug}`;
+}
+
+/**
  * PURE. Build the EFFECTIVE run config from the loaded config + the interactive
  * answers. Returns a NEW AppConfig — the input `config`, its `filters` and its
  * `datePolicy` are never mutated (proven by the isolation test), so a run plan
@@ -91,6 +125,11 @@ export const DATASET_UNSUPPORTED_MESSAGE = 'DATASET_UNSUPPORTED: only Time serie
  * partner (000) and All-products defaults stay put; the country fills the reporter
  * slot via runCountry's resolver, and flipping tradeFlow is all Exports needs.
  * `numbersDisplay` is NOT a URL filter, so it is recorded by the caller, not here.
+ *
+ * The manifest + run-report paths are QUERY-SCOPED (spec row 18) so an interactive
+ * run cannot false-skip against a manifest written for a DIFFERENT query (e.g. the
+ * shipped imports batch) — the Phase-8-review defect. Same-query resume is kept:
+ * an identical plan yields an identical path.
  */
 export function applyRunPlan(config: AppConfig, answers: RunPlanAnswers): AppConfig {
   return {
@@ -110,6 +149,8 @@ export function applyRunPlan(config: AppConfig, answers: RunPlanAnswers): AppCon
       requestedEnd: answers.requestedEnd,
     },
     filenameTemplate: DEFAULT_INTERACTIVE_FILENAME_TEMPLATE,
+    manifestFile: config.manifestFile ? scopePathByQuery(config.manifestFile, answers) : config.manifestFile,
+    runReportFile: config.runReportFile ? scopePathByQuery(config.runReportFile, answers) : config.runReportFile,
   };
 }
 

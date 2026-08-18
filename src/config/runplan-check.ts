@@ -4,6 +4,8 @@ import { AppConfig, BATCH_DEFAULTS, FiltersConfig } from './schema';
 import {
   applyRunPlan,
   describePlan,
+  scopePathByQuery,
+  queryIdentitySlug,
   RunPlanAnswers,
   DEFAULT_INTERACTIVE_FILENAME_TEMPLATE,
   DATASET_UNSUPPORTED_MESSAGE,
@@ -152,6 +154,46 @@ void (async () => {
     assert.equal(original.filters.tradeFlow, 'imports'); // unchanged
     assert.equal(original.datePolicy.requestedStart, '200001'); // unchanged
     assert.equal(original.filenameTemplate, '{country}.{extension}'); // unchanged
+  });
+
+  // -------------------------------------------------------------------------
+  process.stdout.write('\nQuery-scoped resume manifest/report (row 18 — review fix):\n');
+
+  await check('scopePathByQuery inserts the query slug before the extension', () => {
+    const answers: RunPlanAnswers = { ...DEFAULT_ANSWERS, tradeFlow: 'exports' };
+    assert.equal(queryIdentitySlug(answers), 'exports-exporter-monthly-mirror-values-usd');
+    assert.equal(
+      scopePathByQuery('./manifests/latest-run.json', answers),
+      './manifests/latest-run.exports-exporter-monthly-mirror-values-usd.json',
+    );
+    assert.equal(
+      scopePathByQuery('./manifests/run-report.xlsx', answers),
+      './manifests/run-report.exports-exporter-monthly-mirror-values-usd.xlsx',
+    );
+    // No extension → slug appended (a dot inside the dir name must not be mistaken for an ext).
+    assert.equal(scopePathByQuery('./out/latest', answers), './out/latest.exports-exporter-monthly-mirror-values-usd');
+  });
+
+  await check('applyRunPlan query-scopes manifest+report so a different query cannot false-skip', () => {
+    const base: AppConfig = { ...cfg(), manifestFile: './manifests/latest-run.json', runReportFile: './manifests/run-report.xlsx' };
+    const imports = applyRunPlan(base, { ...DEFAULT_ANSWERS, tradeFlow: 'imports' });
+    const exports = applyRunPlan(base, { ...DEFAULT_ANSWERS, tradeFlow: 'exports' });
+    // Different query → different manifest + report files (the review defect is fixed).
+    assert.notEqual(imports.manifestFile, exports.manifestFile);
+    assert.notEqual(imports.runReportFile, exports.runReportFile);
+    // Neither reuses the raw batch manifest that holds the 204 imports SUCCESS entries.
+    assert.notEqual(exports.manifestFile, './manifests/latest-run.json');
+    // Same plan → identical path (same-query resume still works).
+    const exports2 = applyRunPlan(base, { ...DEFAULT_ANSWERS, tradeFlow: 'exports' });
+    assert.equal(exports.manifestFile, exports2.manifestFile);
+    // Input config untouched (isolation).
+    assert.equal(base.manifestFile, './manifests/latest-run.json');
+  });
+
+  await check('applyRunPlan leaves manifest/report undefined when the base config disables them', () => {
+    const eff = applyRunPlan(cfg(), { ...DEFAULT_ANSWERS, tradeFlow: 'exports' }); // cfg() has both undefined
+    assert.equal(eff.manifestFile, undefined);
+    assert.equal(eff.runReportFile, undefined);
   });
 
   // -------------------------------------------------------------------------
