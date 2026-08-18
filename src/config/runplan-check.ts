@@ -299,6 +299,17 @@ void (async () => {
     assert.deepEqual(answers, DEFAULT_ANSWERS);
   });
 
+  await check('View by = Product prompts Detail (default NTL); Exporter has no detail key (row 19)', async () => {
+    // dataset ENTER, flow ENTER, view '2' (Product), freq ENTER, range ENTER, detail ENTER, rest ENTER.
+    const product = await collectRunPlan(scriptedAsk(['', '', '2']), fakeLoggedInPage(), DEFAULT_RANGE, noLog);
+    assert.equal(product.viewBy, 'product');
+    assert.equal(product.detail, 'NTL'); // default, from the ['NTL'] fallback list
+    assert.ok(describePlan(product).includes('detail=NTL'));
+    // Exporter view (all defaults) must NOT carry a detail field.
+    const exporter = await collectRunPlan(scriptedAsk([]), fakeLoggedInPage(), DEFAULT_RANGE, noLog);
+    assert.equal('detail' in exporter, false);
+  });
+
   await check('choosing a non-Time-series dataset throws DATASET_UNSUPPORTED (row 4)', async () => {
     await assert.rejects(
       () => collectRunPlan(scriptedAsk(['2']), fakeLoggedInPage(), DEFAULT_RANGE, noLog),

@@ -35,6 +35,7 @@ export interface RunPlanAnswers {
   dataType: string; // 'values' | 'quantities' | …  → filters.dataType
   currency: string; // 'USD' | 'EUR' | …
   numbersDisplay: string; // 'smart' | 'thousands' | 'millions' — RECORDED only (not URL-encoded, spec row 13)
+  detail?: string; // present ONLY when viewBy === 'product'; default 'NTL' (spec row 19). URL encoding UNCALIBRATED.
 }
 
 // --- Locked option lists (spec rows 4,5,7,8,11,12,13) -----------------------
@@ -67,6 +68,14 @@ export const CURRENCY_DEFAULT_LABEL = 'USD'; // spec row 12
 
 export const NUMBERS_DISPLAY_OPTIONS = ['Smart', 'Thousands', 'Millions'] as const;
 export const NUMBERS_DISPLAY_DEFAULT_INDEX = 0; // Smart (spec row 13)
+
+// Detail — asked ONLY when View by = Product (spec row 19). We do NOT invent the
+// option list: the only value the requirement gives is the default NTL, so the
+// fallback is just ['NTL']; the real list is read live once optionsReader is
+// calibrated. The URL encoding of Detail is UNKNOWN until a real byProduct URL is
+// captured, so a Product-view run is not yet a working export (flagged in the spec).
+export const DETAIL_OPTIONS_FALLBACK = ['NTL'] as const;
+export const DETAIL_DEFAULT_LABEL = 'NTL'; // spec row 19
 
 /**
  * The flow-aware default filename template for interactive runs (spec row 16).
@@ -157,7 +166,8 @@ export function applyRunPlan(config: AppConfig, answers: RunPlanAnswers): AppCon
 /** A one-line human summary of the chosen query (spec row 13 "recorded"). */
 export function describePlan(a: RunPlanAnswers): string {
   return (
-    `dataset=${a.dataset} flow=${a.tradeFlow} viewBy=${a.viewBy} ` +
+    `dataset=${a.dataset} flow=${a.tradeFlow} viewBy=${a.viewBy}` +
+    `${a.detail ? ' detail=' + a.detail : ''} ` +
     `range=${a.requestedStart}-${a.requestedEnd} freq=${a.frequency} ` +
     `source=${a.dataSource} dataType=${a.dataType} currency=${a.currency} numbers=${a.numbersDisplay}`
   );

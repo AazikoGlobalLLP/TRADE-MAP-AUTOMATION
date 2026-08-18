@@ -23,6 +23,8 @@ import {
   CURRENCY_DEFAULT_LABEL,
   NUMBERS_DISPLAY_OPTIONS,
   NUMBERS_DISPLAY_DEFAULT_INDEX,
+  DETAIL_OPTIONS_FALLBACK,
+  DETAIL_DEFAULT_LABEL,
 } from '../config/runPlan';
 
 // ---------------------------------------------------------------------------
@@ -197,6 +199,21 @@ export async function collectRunPlan(
   // Row 10 — Time range. Bare ENTER → config MAX (logged as `default`).
   const range = await promptTimeRange(ask, defaultRange, log);
 
+  // Row 19 — Detail. Asked ONLY when View by = Product (spec rows 7 + 19); default
+  // NTL. Read live (fallback ['NTL']); its URL encoding is uncalibrated, so a
+  // Product-view export is not yet wired — the value is collected + recorded.
+  let detail: string | undefined;
+  if (viewBy === 'product') {
+    detail = await chooseLiveOption(
+      ask,
+      page,
+      log,
+      'Detail',
+      { key: 'detail', triggerLabel: 'Detail', fallback: DETAIL_OPTIONS_FALLBACK },
+      DETAIL_DEFAULT_LABEL,
+    );
+  }
+
   // Row 11 — Data source, then Data type (read live, fall back if uncalibrated).
   const dataSourceLabel = await chooseLiveOption(
     ask,
@@ -229,7 +246,7 @@ export async function collectRunPlan(
   const numbersIdx = await chooseFromMenu(ask, 'Numbers display', NUMBERS_DISPLAY_OPTIONS, NUMBERS_DISPLAY_DEFAULT_INDEX);
   const numbersDisplay = NUMBERS_DISPLAY_OPTIONS[numbersIdx].toLowerCase();
 
-  return {
+  const answers: RunPlanAnswers = {
     dataset,
     tradeFlow,
     viewBy,
@@ -241,6 +258,9 @@ export async function collectRunPlan(
     currency: currencyLabel.trim(), // 'USD' | 'EUR' — currency codes keep their case
     numbersDisplay,
   };
+  // Only present for Product view, so an Exporter run's answers object is unchanged.
+  if (detail !== undefined) answers.detail = detail.trim(); // 'NTL' — keep the acronym's case
+  return answers;
 }
 
 /** Ask the time range until valid; logs `plan.time_range` with whether the default was used. */
