@@ -16,6 +16,7 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
 | 6 — Session-expiry + query gate + report | ⬜ todo — now polish (full run strained nothing); auto re-login + run-report.xlsx |
+| 8 — Interactive dynamic query builder | ⬜ TODO — **#1 PRIORITY** (needs spec-lock first); build after Phase 6 |
 
 ## Now
 **Phase 7 DONE — the full 204-country production export ran and is verified.** `output/` holds **204 valid
@@ -99,6 +100,49 @@ every acceptance criterion AC-01…AC-12.
 **Demo:** full 30-country batch completes with manifest + run-report; AC checklist green.
 Files: src/logging/logger.ts, config/config.json, docs/spec/acceptance.md,
 src/orchestrator/runBatch.ts
+
+## Phase 8 — Interactive dynamic query builder  ← #1 PRIORITY (needs spec-lock first)
+Today the whole query is fixed in `config.json`. Phase 8 makes each RUN interactive:
+the tool reads the live Trade Map options from the DOM, asks the user what they want
+BEFORE launching the export, then drives the batch with those answers. Because many
+options are inter-dependent (chosen dataset → which advanced options exist → which
+values each offers), the DOM is re-read after each choice — never assumed.
+
+**Country list source:** one editable location (e.g. `input/countries.xlsx` / a config
+path) holds the exporter country list; editing it changes what the auto-run processes,
+no code change.
+
+**Startup confirmation + prompts (in order):**
+- Confirm: "About to export data for **X** countries — proceed?"
+- Dataset: `[Time series, Trade indicators, Companies]` (or Trade in services). Default/most: Time series.
+- If **Time series**:
+  - Trade flow: `[Imports, Exports]`
+  - **Exporter** = the given country list (this is what varies per country)
+  - **Importer** and **Product** — left in their DEFAULT state, untouched
+  - View by: `[Product / Exporter]`
+  - Advanced options (revealed after the above):
+    - Time: `[Yearly, Quarterly, Monthly]` — if **Monthly**, first verify a login cookie
+      exists in the browser profile; if not, WARN "you must log in first" (don't hard-fail)
+    - Time range: user types it; empty ENTER → use the default MAX
+    - Detail: NOT shown when View by = Exporter
+    - Data type: `[Values, Mirror, Quantities, …]` — options read live (can differ)
+    - Currency: read live (mainly `USD`, `EUR`)
+    - Numbers display: `[Smart, Thousands, Millions]`
+- The confirmed defaults from the request: View by = Exporter; Advanced = Monthly,
+  Time range MAX, Data source = Mirror, Currency = USD, Numbers display = Smart.
+
+**Flow-aware filename:** name reflects whose data + which flow, e.g. India's export data
+→ `india-export-country…`, India's import data → `india-import-country…` (exact template
+locked in spec-lock; today's convention is country-first `Country__Imports-from-World__…`).
+
+**Demo:** run the command → answer the prompts → the batch exports exactly the chosen
+query for the chosen countries, with flow-aware filenames; re-running with different
+answers changes the output with zero code edits.
+Files (planned): src/cli/prompt.ts, src/trademap/optionsReader.ts (live DOM option lists),
+src/config/runPlan.ts (answers → run plan), src/files/filename.ts (flow-aware), config/config.json
+**Blocked on:** spec-lock — dataset-type coverage, the exact dynamic option lists, the
+Monthly cookie-check signal, and the final filename template are not yet nailed to
+binary acceptance criteria. Lock those before building.
 
 ---
 

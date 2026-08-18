@@ -62,11 +62,15 @@ export interface AppConfig {
   download: DownloadConfig;
   batch: BatchConfig;
   manifestFile?: string; // Phase 5 (§30); when set, the batch writes/reads a resume manifest here
+  runReportFile?: string; // Phase 6 (§31); human-readable run-report.xlsx path (batch mode)
   filenameTemplate: string;
 }
 
 /** Default resume-manifest path (spec-lock row 1). Applied by validateConfig when unset. */
 export const DEFAULT_MANIFEST_FILE = './manifests/latest-run.json';
+
+/** Default human-readable run-report path (Phase 6, §31). Applied by validateConfig when unset. */
+export const DEFAULT_RUN_REPORT_FILE = './manifests/run-report.xlsx';
 
 /** Defaults for the optional `batch` block (spec-lock row 11). */
 export const BATCH_DEFAULTS: BatchConfig = {
@@ -154,6 +158,9 @@ export function validateConfig(raw: unknown): AppConfig {
   const filenameTemplate = reqString(c.filenameTemplate, 'filenameTemplate');
   // manifestFile — optional (Phase 5); when unset, defaults so the batch always has a resume manifest.
   const manifestFile = c.manifestFile !== undefined ? reqString(c.manifestFile, 'manifestFile') : DEFAULT_MANIFEST_FILE;
+  // runReportFile — optional (Phase 6); when unset, defaults alongside the manifest.
+  const runReportFile =
+    c.runReportFile !== undefined ? reqString(c.runReportFile, 'runReportFile') : DEFAULT_RUN_REPORT_FILE;
 
   // filters — all 10 keys required, each a non-empty string.
   const rawFilters = reqObject(c.filters, 'filters');
@@ -241,6 +248,7 @@ export function validateConfig(raw: unknown): AppConfig {
     download,
     batch,
     manifestFile,
+    runReportFile,
     filenameTemplate,
   };
 }

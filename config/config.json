@@ -45,6 +45,7 @@
   },
 
   "manifestFile": "./manifests/latest-run.json",
+  "runReportFile": "./manifests/run-report.xlsx",
 
   "filenameTemplate": "{countrySlug}__{flow}-from-World__AllProducts__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}"
 }

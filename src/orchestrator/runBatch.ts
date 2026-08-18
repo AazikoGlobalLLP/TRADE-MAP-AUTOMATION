@@ -16,6 +16,7 @@ import {
   writeManifest as realWriteManifest,
 } from '../manifest/manifest';
 import { isAlreadyDone } from '../manifest/resume';
+import { isSessionExpired, sessionExpiredAbortReason } from '../auth/expiry';
 
 // ---------------------------------------------------------------------------
 // Batch orchestrator (Phase 4, PRD §35/§36; spec-lock rows 4–6,10,13).
@@ -55,6 +56,7 @@ export interface BatchSummary {
   failed: number;
   aborted: boolean; // a fatal error (LOGIN_REQUIRED) stopped the batch early
   abortReason?: string;
+  sessionExpired: boolean; // the abort cause was an expired session (§28/AC-08) — re-login + rerun to resume
   exitCode: 0 | 1 | 2; // 0 all ok · 1 any FAILED · 2 aborted/empty
   outcomes: CountryOutcome[];
 }
@@ -140,6 +142,7 @@ export async function runBatch(
   const outcomes: CountryOutcome[] = [];
   let aborted = false;
   let abortReason: string | undefined;
+  let sessionExpired = false;
 
   const requestedRange = `${global.requestedStart}-${global.requestedEnd}`;
   // `--force` overrides the collision mode to `overwrite` for the whole run (spec-lock row 4).
@@ -268,10 +271,19 @@ export async function runBatch(
     } catch (fatal) {
       // withRetry re-throws a FATAL error (e.g. LOGIN_REQUIRED) instead of retrying:
       // a dead session fails every remaining country identically, so abort the batch.
+      // Session expiry (§28/AC-08) is the expected fatal here: remaining countries are
+      // NOT touched (loop breaks → they stay PENDING), and the abort reason tells the
+      // user how to resume. A non-auth fatal keeps the generic abort message.
       const message = fatal instanceof Error ? fatal.message : String(fatal);
       aborted = true;
-      abortReason = message;
-      log('error', 'batch.aborted', { country, error: message });
+      if (isSessionExpired(fatal)) {
+        sessionExpired = true;
+        abortReason = sessionExpiredAbortReason(country, message);
+        log('warn', 'batch.session_expired', { country });
+      } else {
+        abortReason = message;
+        log('error', 'batch.aborted', { country, error: message });
+      }
       const oc: CountryOutcome = { country, status: 'FAILED', attempts: 1, error: message };
       outcomes.push(oc);
       recordAndPersist(oc);
@@ -292,10 +304,11 @@ export async function runBatch(
     failed,
     aborted,
     abortReason,
+    sessionExpired,
     exitCode,
     outcomes,
   };
-  log('info', 'batch.summary', { runId, total: summary.total, success, skipped, failed, aborted, exitCode });
+  log('info', 'batch.summary', { runId, total: summary.total, success, skipped, failed, aborted, sessionExpired, exitCode });
   return summary;
 }
 
@@ -329,5 +342,6 @@ export function renderSummaryTable(summary: BatchSummary): string {
       `FAILED ${summary.failed}${summary.aborted ? ' · ABORTED' : ''} · exit ${summary.exitCode}`,
   );
   if (summary.abortReason) lines.push(`Reason: ${summary.abortReason}`);
+  if (summary.sessionExpired) lines.push('SESSION EXPIRED — re-login and rerun the same command to resume (completed countries are skipped).');
   return lines.join('\n');
 }

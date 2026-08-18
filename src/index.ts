@@ -7,6 +7,7 @@ import { RequestedRange } from './trademap/rangeEngine';
 import { runCountry, Logger } from './orchestrator/runCountry';
 import { readCountries } from './input/readCountries';
 import { runBatch, renderSummaryTable } from './orchestrator/runBatch';
+import { writeRunReport } from './report/runReport';
 
 // ---------------------------------------------------------------------------
 // Tiny CLI arg reader: --key value
@@ -74,7 +75,28 @@ async function main(): Promise<void> {
       // Phase 4: sequential batch over runCountry() with per-country retry + failure evidence.
       // Phase 5: resume manifest + idempotency skip + collision modes (`force` bypasses the skip).
       const summary = await runBatch(page, countries, global, config, codes, log, runId, undefined, force);
+
+      // Phase 6 (§31): emit the human-readable run report. Best-effort — a report
+      // write failure must never mask the actual run result (same rule as the manifest).
+      if (config.runReportFile) {
+        try {
+          await writeRunReport(
+            path.resolve(config.runReportFile),
+            summary,
+            `${global.requestedStart}-${global.requestedEnd}`,
+            { generatedAt: new Date().toISOString(), sessionExpired: summary.sessionExpired, abortReason: summary.abortReason },
+          );
+          log('info', 'report.written', { file: config.runReportFile });
+        } catch (e) {
+          log('error', 'report.write_failed', { error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
       process.stdout.write('\n' + renderSummaryTable(summary) + '\n');
+      // Phase 6 (§28/AC-08): make an expired session impossible to miss on the console.
+      if (summary.sessionExpired) {
+        process.stdout.write('\n[SESSION EXPIRED] ' + (summary.abortReason ?? '') + '\n');
+      }
       process.exitCode = summary.exitCode; // 0 all ok · 1 any FAILED · 2 aborted/empty
       return;
     }

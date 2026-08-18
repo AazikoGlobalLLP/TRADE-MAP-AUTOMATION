@@ -17,6 +17,7 @@
     "test:isolation": "tsx src/orchestrator/isolation-check.ts",
     "test:batch": "tsx src/orchestrator/batch-check.ts",
     "test:manifest": "tsx src/manifest/manifest-check.ts",
+    "test:report": "tsx src/report/report-check.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
