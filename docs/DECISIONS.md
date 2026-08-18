@@ -236,3 +236,35 @@ Format: date · decision · why · alternative rejected.
   CLAUDE.md forbids inventing these; they must be nailed to binary acceptance criteria first. Captured in
   PHASES.md "Phase 8"; build is deferred to a dedicated spec-lock + build session. Rejected: building it inline
   this session (would bake in guessed option lists + a filename template that conflicts with the shipped one).
+- **2026-08-18 · Phase 8 spec-locked to 18 rows, then built (interactive dynamic query builder).** Why: the
+  request had undefined edges (spec-lock). Locked: `--interactive`/`-i` flag (batch/single unchanged);
+  non-TTY refuses (`INTERACTIVE_REQUIRES_TTY`, exit 2, no browser); count-confirm PRE-launch, all option
+  prompts POST-launch against live DOM; only **Time series** built (others → `DATASET_UNSUPPORTED`, exit 2);
+  Importer/Product/World-partner/`view` left untouched (row 6 — flipping `tradeFlow` is all Exports needs);
+  Monthly login signal is a SOFT warn via `isLoginPage` (never hard-fail); time range empty→config MAX.
+  Full contract in `docs/spec/phase-8-interactive-query-builder.md`. Rejected: open questions (used a
+  decision table); driving non-URL controls (Numbers display recorded only).
+- **2026-08-18 · Answers → effective config; the UNCHANGED engine runs it (Phase 8 architecture).** Why: the
+  whole query is URL-driven already, so the interactive layer only needs to build inputs. `collectRunPlan`
+  (injectable `Ask`, testable without stdin) → `RunPlanAnswers`; pure `applyRunPlan` returns a NEW AppConfig
+  (filters + datePolicy + filenameTemplate overridden, input never mutated) that feeds the existing
+  `runBatch`/`runCountry` untouched. Live option LISTS read by `optionsReader` (CDK overlay, selectors
+  UNCALIBRATED like filters/resolver); on any miss it returns the locked fallback list + logs `options.fallback`
+  — never aborts, never guesses a value. Proven offline: `npm run test:runplan` (18/18), tsc clean, existing
+  harnesses unchanged. Rejected: a new query engine or DOM-driving each control.
+- **2026-08-18 · Flow-aware filename for interactive runs (Phase 8 row 16).** Why: name must reflect whose data
+  + which flow — `india-export-country…` vs `india-import-country…`. New template
+  `{countrySlug}-{flowWord}-{viewWord}__{startPretty}_to_{endPretty}__{timeWord}-{sourceWord}-{currency}.{extension}`;
+  `deriveFlowTokens` maps flow→import/export, viewBy exporter→country/product→product, source, frequency. Added
+  ALONGSIDE the existing tokens so today's country-first `--batch`/`--country` template is unchanged. The
+  `viewWord=country` reading + the Exports `/c/<code>/` slot order are flagged to confirm on one live export.
+- **2026-08-18 · Interactive runs use a QUERY-SCOPED manifest/report path (Phase 8 row 18 — adversarial-review fix).**
+  Why: the Phase 5 resume skip keys on **country + range only** (`shouldSkipByManifest`), and the manifest stores
+  no query identity. Without scoping, `--interactive` → Exports → ENTER (default range = the shipped imports range)
+  matched `latest-run.json`'s 204 imports SUCCESS entries → every country SKIPPED (ALREADY_DONE), ZERO exports,
+  exit 0 — silent wrong output that also broke the "changing answers changes output" AC. Caught by the Phase 8
+  review workflow. Fix: `applyRunPlan` inserts a query-identity slug (`flow-viewBy-frequency-source-dataType-currency`)
+  before the manifest + run-report extension, so a different query can't false-skip and same-query resume still
+  works — no manifest-schema/resume change (manifest 24/24 unchanged). Rejected: adding a query signature to the
+  manifest schema (backward-compat hole: existing signature-less entries still false-skip) and force-always
+  (loses interactive resume).

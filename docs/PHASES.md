@@ -16,26 +16,32 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
 | 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
-| 8 — Interactive dynamic query builder | ⬜ TODO — **#1 PRIORITY** (needs spec-lock first) |
+| 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (18 rows) + built; offline `test:runplan` 18/18, tsc clean, existing 22/24/8/29 unchanged; adversarial review clean after 1 fix. **Live headed run is the user's** (AC pending) |
 
 ## Now
-**Phase 6 DONE (2026-08-18) — run report + session-expiry are in.** Each batch now writes a human-readable
-`run-report.xlsx` (PRD §31: Country · Requested · Effective · Range status · Status · Attempts · File · Error)
-next to the manifest, and an expired session is handled explicitly: the run pauses (manual re-login at the
-navigation boundary) and, if the login is abandoned, aborts with actionable resume guidance — remaining
-countries stay PENDING (never FAILED), so re-login + rerun resumes (AC-08). The query-validation gate was
-already live from Phase 3. Proven headless: `test:report` 8/8, `test:batch` 22/22, `test:manifest` 24/24;
-`tsc` clean. Committed on `phase-1-poc`; **not yet pushed**. (Phase 7's 204-file export is unaffected and
-still valid — do NOT re-run it.)
+**Phase 8 CODE COMPLETE (2026-08-18) — interactive dynamic query builder is built + offline-verified.**
+`npm run export -- --interactive` (or `-i`) now: confirms the country count PRE-launch, launches the headed
+browser, walks the user through the query against the LIVE DOM (dataset → flow → view → time → range → data
+source/type → currency → numbers display), and drives the EXISTING batch engine with the answers. Only **Time
+series** is built (others exit `DATASET_UNSUPPORTED`); Importer/Product/World-partner stay default; Monthly
+soft-warns if not logged in; flow-aware filenames (`india-export-country…`). Answers → `applyRunPlan` → a NEW
+effective config (engine untouched). An adversarial review caught + fixed a silent resume false-skip
+(interactive runs now use a **query-scoped** manifest/report path). Proven offline: `test:runplan` **18/18**,
+`tsc` clean, existing `test:batch` 22/22 · `test:manifest` 24/24 · `test:report` 8/8 · `test:isolation` 29/29
+all unchanged. Committed on `phase-1-poc`; **not yet pushed**. (Phase 7's 204-file imports export is unaffected
+— do NOT re-run it.)
 
 ## Next 3
-1. **#1 — Phase 8: interactive dynamic query builder.** First run **spec-lock** (dataset-type coverage, the
-   live/dynamic option lists, the Monthly cookie-check signal, the flow-aware filename template), THEN build.
-   See the Phase 8 section below for the full captured requirement.
-2. **Make it durable: push a properly-named branch + open a PR** (carries Phases 1–7 + Phase 6). e.g.
-   `git checkout -b phase-6-report-and-resume` then `git push -u origin phase-6-report-and-resume`.
-3. Optional: verify the Phase 6 report live on the next real batch (`manifests/run-report.xlsx` appears and
-   lists every country); move production output to `D:\TradeMap\Exports` if that is the deliverable target.
+1. **#1 — Phase 8 LIVE acceptance (the user's headed run).** Run `npm run export:interactive`, answer the
+   prompts (try flow = **Exports**), and confirm on ONE real export: (a) a `india-export-country…xlsx` lands
+   and validates; (b) the Exports `/c/<code>/` URL slot order is correct; (c) `viewWord=country` reads right.
+   These are the two flagged spec risks — one live export settles both. It PAUSES on a login page (ENTER to
+   continue), so it can't be launched from a tool shell — it's yours to run.
+2. **Make it durable: push a properly-named branch + open a PR** (carries Phases 1–8). e.g.
+   `git checkout -b phase-8-interactive-query-builder` then `git push -u origin phase-8-interactive-query-builder`.
+3. Optional: while calibrating, pin the `optionsReader` overlay selectors against the live DOM so the advanced
+   prompts show the REAL Data type/Currency lists (they fall back to the locked lists + log `options.fallback`
+   until then). Move production output to `D:\TradeMap\Exports` if that is the deliverable target.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress
