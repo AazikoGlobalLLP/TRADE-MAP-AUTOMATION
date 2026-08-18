@@ -10,6 +10,7 @@
     "dev":"",
     "build": "tsc",
     "export": "tsc && node dist/index.js",
+    "export:interactive": "tsc && node dist/index.js --interactive",
     "batch": "tsc && node dist/index.js --batch",
     "start": "node dist/index.js",
     "calibrate": "tsc && node dist/tools/calibrate-probe.js",
@@ -18,6 +19,7 @@
     "test:batch": "tsx src/orchestrator/batch-check.ts",
     "test:manifest": "tsx src/manifest/manifest-check.ts",
     "test:report": "tsx src/report/report-check.ts",
+    "test:runplan": "tsx src/config/runplan-check.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

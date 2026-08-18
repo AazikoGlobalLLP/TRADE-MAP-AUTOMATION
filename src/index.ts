@@ -8,6 +8,8 @@ import { runCountry, Logger } from './orchestrator/runCountry';
 import { readCountries } from './input/readCountries';
 import { runBatch, renderSummaryTable } from './orchestrator/runBatch';
 import { writeRunReport } from './report/runReport';
+import { confirmProceed, collectRunPlan, createStdinAsk } from './cli/prompt';
+import { applyRunPlan, describePlan } from './config/runPlan';
 
 // ---------------------------------------------------------------------------
 // Tiny CLI arg reader: --key value
@@ -36,6 +38,7 @@ function makeLogger(logFile: string): Logger {
 
 async function main(): Promise<void> {
   const batchMode = hasFlag('batch');
+  const interactive = process.argv.includes('--interactive') || process.argv.includes('-i'); // Phase 8
   const force = hasFlag('force'); // Phase 5 (§36): ignore the resume manifest + overwrite existing files
   const country = getArg('country') ?? 'Dominica';
   const runId = getArg('run-id') ?? new Date().toISOString().replace(/[:.]/g, '-');
@@ -47,7 +50,7 @@ async function main(): Promise<void> {
     runId,
     mode: config.datePolicy.mode,
     ...(force ? { force: true } : {}),
-    ...(batchMode ? { batch: true } : { country }),
+    ...(interactive ? { interactive: true } : batchMode ? { batch: true } : { country }),
   });
 
   // Load the local country-code map (PRD §7). Resolution runs AFTER the browser launches
@@ -63,6 +66,89 @@ async function main(): Promise<void> {
     requestedStart: config.datePolicy.requestedStart,
     requestedEnd: config.datePolicy.requestedEnd,
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 8 — interactive dynamic query builder (spec: docs/spec/phase-8-*).
+  // Confirm the country count + TTY BEFORE launching a browser (spec rows 2,3),
+  // then read the live-DOM prompts AFTER launch (spec row 17) and drive the
+  // EXISTING batch engine with the resulting run plan (spec row 15).
+  // -------------------------------------------------------------------------
+  if (interactive) {
+    // Row 2 — a headed, question/answer run needs a real terminal; refuse otherwise.
+    if (!process.stdin.isTTY) {
+      process.stderr.write('INTERACTIVE_REQUIRES_TTY: --interactive needs a real terminal (stdin is not a TTY).\n');
+      process.exitCode = 2;
+      return;
+    }
+    // Row 3 — read the ordered country list + confirm the count, PRE-launch.
+    const listFile = getArg('countries') ?? config.batch.inputFile;
+    const listCountries = await readCountries(path.resolve(listFile), log);
+    const { ask, close } = createStdinAsk();
+    try {
+      if (!(await confirmProceed(ask, listCountries.length))) {
+        log('info', 'interactive.aborted', { reason: 'user_declined' });
+        process.exitCode = 0;
+        return;
+      }
+      // Rows 4-13 — launch, THEN collect the live-DOM prompts.
+      const { context, page } = await launchSession(config.browserProfileDir, config.tradeMapBaseUrl);
+      try {
+        const answers = await collectRunPlan(
+          ask,
+          page,
+          { start: global.requestedStart, end: global.requestedEnd },
+          log,
+        );
+        log('info', 'plan.confirmed', { plan: describePlan(answers) });
+
+        // Row 15 — answers → effective config; the untouched engine runs it. The
+        // plan's range is the new immutable GLOBAL for this run (convention #2).
+        const effectiveConfig = applyRunPlan(config, answers);
+        const effectiveGlobal: RequestedRange = Object.freeze({
+          requestedStart: effectiveConfig.datePolicy.requestedStart,
+          requestedEnd: effectiveConfig.datePolicy.requestedEnd,
+        });
+        const rangeStr = `${effectiveGlobal.requestedStart}-${effectiveGlobal.requestedEnd}`;
+
+        const summary = await runBatch(
+          page,
+          listCountries,
+          effectiveGlobal,
+          effectiveConfig,
+          codes,
+          log,
+          runId,
+          undefined,
+          force,
+        );
+
+        // Phase 6 (§31) run report — same best-effort write as the batch path.
+        if (effectiveConfig.runReportFile) {
+          try {
+            await writeRunReport(path.resolve(effectiveConfig.runReportFile), summary, rangeStr, {
+              generatedAt: new Date().toISOString(),
+              sessionExpired: summary.sessionExpired,
+              abortReason: summary.abortReason,
+            });
+            log('info', 'report.written', { file: effectiveConfig.runReportFile });
+          } catch (e) {
+            log('error', 'report.write_failed', { error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
+        process.stdout.write('\n' + renderSummaryTable(summary) + '\n');
+        if (summary.sessionExpired) {
+          process.stdout.write('\n[SESSION EXPIRED] ' + (summary.abortReason ?? '') + '\n');
+        }
+        process.exitCode = summary.exitCode;
+      } finally {
+        await context.close();
+      }
+    } finally {
+      close(); // release readline whether we finished, declined, or threw
+    }
+    return;
+  }
 
   // In batch mode, read + normalise the ordered country list BEFORE launching the
   // browser, so a bad/empty input file fails fast (exit 2) without a browser.
@@ -125,6 +211,9 @@ main().catch((err: unknown) => {
   process.stderr.write(
     JSON.stringify({ ts: new Date().toISOString(), level: 'error', event: 'run.failed', error: message }) + '\n',
   );
-  // A bad/empty batch input file is an abort (exit 2), not a run failure (exit 1) — spec row 3.
-  process.exitCode = /BATCH_EMPTY|BATCH_INPUT_MISSING/.test(message) ? 2 : 1;
+  // A bad/empty batch input file — or a Phase 8 dataset/TTY abort — is an abort (exit 2),
+  // not a run failure (exit 1). (Phase 4 spec row 3; Phase 8 spec rows 2,4.)
+  process.exitCode = /BATCH_EMPTY|BATCH_INPUT_MISSING|DATASET_UNSUPPORTED|INTERACTIVE_REQUIRES_TTY/.test(message)
+    ? 2
+    : 1;
 });

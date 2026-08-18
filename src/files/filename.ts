@@ -17,6 +17,37 @@ export function generateFilename(template: string, tokens: Record<string, string
   return sanitizeFilename(rendered);
 }
 
+/** Inputs the flow-aware tokens are derived from (a subset of FiltersConfig). */
+export interface FlowTokenInput {
+  tradeFlow: string; // 'imports' | 'exports'
+  viewBy: string; // 'exporter' | 'product'
+  frequency: string; // 'monthly' | 'quarterly' | 'yearly'
+  source: string; // 'mirror' | 'direct'
+}
+
+// Word maps for the Phase 8 flow-aware filename (spec row 16). Singular flow word
+// to match the `india-export-country…` example; viewBy "exporter" renders as
+// "country" (rows are partner countries). An unmapped value passes through
+// lower-cased rather than being invented, so a new option is visible in the name.
+const FLOW_WORD: Record<string, string> = { imports: 'import', exports: 'export' };
+const VIEW_WORD: Record<string, string> = { exporter: 'country', product: 'product' };
+const SOURCE_WORD: Record<string, string> = { mirror: 'mirror', direct: 'direct' };
+
+/**
+ * PURE. Derive the Phase 8 flow-aware filename tokens from the (effective) filters.
+ * Added to the token map alongside the existing tokens, so today's country-first
+ * templates are unaffected (they simply never reference these keys). (spec row 16)
+ */
+export function deriveFlowTokens(f: FlowTokenInput): Record<string, string> {
+  const lc = (s: string): string => s.trim().toLowerCase();
+  return {
+    flowWord: FLOW_WORD[lc(f.tradeFlow)] ?? lc(f.tradeFlow),
+    viewWord: VIEW_WORD[lc(f.viewBy)] ?? lc(f.viewBy),
+    timeWord: lc(f.frequency),
+    sourceWord: SOURCE_WORD[lc(f.source)] ?? lc(f.source),
+  };
+}
+
 /**
  * Make a rendered name safe to write on Windows (production target is
  * `D:\TradeMap\Exports`). The resolver now accepts arbitrary country names, so a

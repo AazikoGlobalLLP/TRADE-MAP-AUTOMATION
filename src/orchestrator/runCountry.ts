@@ -7,7 +7,7 @@ import { RequestedRange, computeEffectiveRange } from '../trademap/rangeEngine';
 import { saveDownload, validateXlsx } from '../files/save-validate';
 import { CollisionMode, resolveCollisionMode } from '../files/collision';
 import { readEffectiveRangeFromWorkbook } from '../files/effective-range';
-import { generateFilename } from '../files/filename';
+import { generateFilename, deriveFlowTokens } from '../files/filename';
 import { AppConfig } from '../config/schema';
 import { resolveCountryCode } from '../country/resolver';
 
@@ -152,6 +152,9 @@ export async function runCountry(
     startPretty: prettyYYYYMM(eff.start), // "2001-01"
     endPretty: prettyYYYYMM(eff.end), // "2026-06"
     extension: config.download.format,
+    // Phase 8 flow-aware tokens (spec row 16): flowWord/viewWord/timeWord/sourceWord.
+    // Harmless for older templates (unreferenced keys are ignored).
+    ...deriveFlowTokens(config.filters),
   });
 
   const base = {
