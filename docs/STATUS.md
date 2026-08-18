@@ -1,13 +1,12 @@
 # Status — Trade Map Automated Export System
-**Updated:** 2026-08-17
-**Working on right now:** The tool has finished pulling the full set of trade files — all 204 countries — and I've double-checked they're all really there and open correctly.
+**Updated:** 2026-08-18
+**Working on right now:** Adding the last safety-and-reporting touches so a run is easy to audit and can recover if the website logs us out mid-way.
 
 **Done this week:**
-- The system logged into Trade Map and downloaded a monthly import spreadsheet for every one of the 204 countries — 204 out of 204 succeeded, none failed.
-- I independently checked the results: the number of countries we asked for, the number the system recorded, and the number of actual files on disk all match at 204, and none are empty or broken.
-- Every file is named clearly and consistently, starting with the country name, so they're easy to browse and sort.
-- Each country's file correctly covers only the months that country actually has data for, so no country's date range leaked into another's — which was the main risk we were guarding against.
+- Every run now produces a simple spreadsheet report listing each country, the dates requested, the dates actually received, whether it succeeded, how many tries it took, and the file name — so anyone can check a run at a glance without reading logs.
+- If the website's login expires while a run is going, the tool now stops cleanly and tells the user exactly what to do (log back in and run the same command again); the countries it already finished are remembered and skipped, so no completed work is repeated or lost.
+- All of this was checked automatically — nine new checks plus the existing forty-six all pass, and the project still builds with zero errors — without needing to re-download anything.
 
 **Blocked on:** nothing.
 
-**Next:** Save this finished work to the shared repository so it's backed up, then add an automatic "log back in and keep going" feature so future runs need no one watching.
+**Next:** Design and build the new "ask me what you want" mode, where the tool asks a few questions at the start of each run (which countries, imports or exports, monthly/yearly, etc.) instead of everything being fixed in a settings file — we'll pin down the exact questions first, then build it.

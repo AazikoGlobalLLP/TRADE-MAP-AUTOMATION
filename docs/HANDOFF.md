@@ -1,52 +1,60 @@
-# HANDOFF — Trade Map Automated Export System — Phase 7 COMPLETE (full 204 export done + verified) — 2026-08-17
+# HANDOFF — Trade Map Automated Export System — Phase 6 COMPLETE (run report + session-expiry) — 2026-08-18
 
 ## Done
-- **The full 204-country production export RAN and is independently verified.** One valid
-  `.xlsx` per country now sits in `output/` — **204 files, 204/204 SUCCESS, 0 FAILED, 0 SKIPPED**
-  (manifest `runId 2026-08-17T14-35-29-629Z`, ~32 min wall clock, clean exit, no session-expiry
-  cluster). Every file is non-zero (100 KB–592 KB, median 420 KB) and opens as a workbook.
-- **Cross-checked three ways, not just trusting the "done" summary:** input list (204) ==
-  manifest entries (204) == files on disk (204); every SUCCESS entry points to a file that
-  exists; every input country appears in the manifest; a deep A→Z sample of 5 workbooks opens
-  (1 sheet, ~130–148 rows × 324 month-columns).
-- **Range isolation held in production (the core §39 risk):** effective ranges vary per country
-  — **47 FULL_RANGE vs 157 CLIPPED_BY_AVAILABILITY**. If the global requested range had bled,
-  every file would show an identical span; the spread proves each range was read from its own
-  workbook. The 324 columns = the full requested span (2000-01→2026-06) rendered with `0`-padding,
-  exactly as the beta-site gotcha documents.
-- **Uniform, human-readable naming across all 204** (country-first convention), e.g.
-  `Afghanistan__Imports-from-World__AllProducts__2001-01_to_2026-06__Monthly-Mirror-USD.xlsx`.
+- **Phase 6 built and proven headless.** Two genuinely-missing PRD pieces landed; the third
+  (query-validation gate, §42) was already live from Phase 3.
+  - **`run-report.xlsx` (PRD §31).** Each batch now writes a human-readable Excel report next to
+    the manifest (`./manifests/run-report.xlsx` by default, gitignored). Columns: Country ·
+    Requested · Effective · Range status · Status · Attempts · File · Error, one row per country
+    in input order, plus a run-metadata + totals footer. `buildReportRows` is a PURE function;
+    `writeRunReport` is the thin ExcelJS shell. Emitted best-effort — a report write failure logs
+    `report.write_failed` and never masks the run result (same rule as the manifest write).
+  - **Explicit session-expiry pause/resume (PRD §28, AC-08).** The live pause was already there
+    (`gotoAuthenticated` detects the login page and waits on a manual login + ENTER, then
+    re-navigates = resume current country). Phase 6 adds `src/auth/expiry.ts` (`isSessionExpired`,
+    `sessionExpiredAbortReason`); on an abandoned-login abort the batch now sets
+    `summary.sessionExpired`, logs `batch.session_expired`, prints a console banner, and writes a
+    resume note into the report. Remaining countries stay PENDING (never FAILED), so re-login +
+    rerun the SAME command resumes via the manifest — no completed work lost.
+- **Verified without a browser:** `npm run build` clean (tsc, 0 errors); `npm run test:report`
+  **8/8**; `npm run test:batch` **22/22** and `npm run test:manifest` **24/24** unchanged (no
+  regression — the existing LOGIN_REQUIRED batch test still passes).
+- **Board:** added **Phase 8 — Interactive dynamic query builder** as the **#1 priority** (see below).
 
 ## Files changed
-- None in `src/` this session — Phase 7 was a RUN + verification, not a build. Only generated
-  artifacts changed: `output/*.xlsx` (204 files, gitignored) and `manifests/latest-run.json`
-  (gitignored). Docs updated (this file, DECISIONS, PHASES, STATUS).
+- New: `src/report/runReport.ts`, `src/report/report-check.ts` (`test:report`), `src/auth/expiry.ts`.
+- Edited: `src/orchestrator/runBatch.ts` (sessionExpired flag + expiry branch + summary line),
+  `src/index.ts` (write report + expiry banner in the batch path), `src/config/schema.ts`
+  (`runReportFile` + default `./manifests/run-report.xlsx`), `config/config.json`, `package.json`
+  (`test:report`), `docs/PHASES.md`, `docs/DECISIONS.md`, `docs/STATUS.md`.
+- Committed on `phase-1-poc` (commit `phase-6: run-report.xlsx + explicit session-expiry…`).
 
-## Decisions made
-- Phase 7 needs no new code — the pipeline was already proven live; the production run just
-  exercised it at scale. (See DECISIONS 2026-08-17 Phase-7 entry.)
-- Pre-run cleanup (5 old-named smoke files + old manifest) was done SAFELY: moved to the session
-  scratchpad `pre-phase7-backup/` first (reversible), then cleared — never a bare hard-delete.
+## Decisions made (see DECISIONS.md 2026-08-18)
+- Phase 6 = report + explicit expiry; the query gate already existed (didn't rebuild it).
+- Report = PRD §31's six columns + two already-computed audit columns (Range status, Error) —
+  nothing invented.
+- Kept the existing pause/abort FAILED-status flow; Phase 6 only makes expiry explicit +
+  actionable (no new PAUSED status → no schema ripple, existing tests stay green).
+- Phase 8 is #1 but spec-locked BEFORE any code (undefined dataset types / dynamic option lists /
+  Monthly cookie signal / flow-aware filename template).
 
 ## Known broken / deliberately skipped
-- **Phase 6 (auto re-login on session expiry) still NOT built.** It didn't bite this run (the
-  session held for 32 min), but a future re-run on stale data could. Mitigation unchanged:
-  re-login in the browser, rerun the SAME command, resume skips completed countries.
-- **Nothing pushed.** All code is committed locally on branch `phase-1-poc` (misnamed; holds
-  Phases 1–7). Push a properly-named branch before opening a PR. The 204 output files are the
-  deliverable and are gitignored — they live on disk, not in git.
-- **No `run-report.xlsx` yet** (§28/§31, Phase 6). The manifest JSON is the current record of
-  requested/effective/status/attempts per country.
+- **Not pushed yet.** All code is committed locally on `phase-1-poc` (misnamed; holds Phases 1–7 +
+  Phase 6). Push a properly-named branch before opening a PR. The 204 Phase-7 output files remain
+  the deliverable and are gitignored (on disk, not git) — Phase 6 did not touch them.
+- **Live confirmation of the report is pending** — the report was proven via a real .xlsx
+  round-trip in the harness, but has not yet been produced by a live `--batch` run. It will appear
+  automatically on the next real batch; no action needed to enable it.
+- The `AC-08` LIVE demo (expire the session mid-run in a headed browser) is the USER's to run — the
+  export is interactive/headed and pauses on a terminal ENTER, so it can't be driven from a tool shell.
 
 ## Next session starts here
-- Phase 6: build session-expiry auto pause/resume + `run-report.xlsx`, informed now by a real
-  full run (which strained nothing — so this is polish, not rescue).
-- First command (durability first — make the completed phase survive): 
-  ```
-  git checkout -b phase-7-full-export
-  git push -u origin phase-7-full-export
-  ```
-  then open a PR. (The export itself is DONE — do NOT re-run it. To re-verify the output instead,
-  re-open `manifests/latest-run.json` and confirm 204/204 SUCCESS.)
-- Watch out for: **don't re-run the export "just to check"** — it would re-download all 204. The
-  files are already validated; verification reads the manifest + disk, it does not re-export.
+- **#1 — Phase 8 (interactive dynamic query builder): SPEC-LOCK first, then build.** Lock the
+  dataset-type coverage, the live/dynamic option lists (Data type, Currency), the Monthly
+  login-cookie check, and the flow-aware filename template (`india-export-country…` vs
+  `india-import-country…`) to binary acceptance criteria. Full captured requirement is in
+  `docs/PHASES.md` → "Phase 8". Do NOT start coding before the spec is locked (CLAUDE.md: never invent).
+- **Durability:** push a properly-named branch + open a PR (carries Phases 1–7 + Phase 6), e.g.
+  `git checkout -b phase-6-report-and-resume` then `git push -u origin phase-6-report-and-resume`.
+- Watch out for: **don't re-run the 204-country export "just to check"** — it re-downloads all 204.
+  Phase 7's output is already validated; verify via `manifests/latest-run.json` + files on disk.

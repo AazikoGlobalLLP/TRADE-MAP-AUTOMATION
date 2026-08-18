@@ -206,3 +206,33 @@ Format: date · decision · why · alternative rejected.
   old-named smoke files + old manifest had to be cleared for uniform naming, but CLAUDE.md forbids discarding
   work. They were MOVED to the session scratchpad `pre-phase7-backup/` first (reversible), then removed from
   `output/`/`manifests/`. Rejected: `Remove-Item` straight off (irreversible even for gitignored generated data).
+- **2026-08-18 · Phase 6 = run-report.xlsx + explicit session-expiry semantics; the query gate was already
+  live (Phase 3).** Why: of Phase 6's three PRD pieces (§28 session-expiry, §31 report, §42 query gate), only
+  the report and explicit expiry handling were missing — `verifyQuery` already blocks a wrong Save. New
+  `src/report/runReport.ts` (`writeRunReport`, best-effort from the batch path) + `src/auth/expiry.ts`
+  (`isSessionExpired`, `sessionExpiredAbortReason`). Proven offline by `npm run test:report` (8/8); `tsc`
+  clean; `test:batch` 22/22 + `test:manifest` 24/24 unchanged. Rejected: rebuilding the gate.
+- **2026-08-18 · run-report.xlsx columns = the PRD §31 six + two already-computed audit columns.** Why: §31
+  fixes Country · Requested · Effective · Status · File · Attempts; the report also carries **Range status**
+  and **Error** because both are already produced per country (manifest/outcome) and make FULL-vs-CLIPPED and
+  failure causes auditable at a glance. Nothing invented — every cell is a field the batch already emits.
+  `buildReportRows` is PURE (proven offline); `writeRunReport` is the thin ExcelJS shell. Status is title-cased
+  ("Success") to match the PRD example table. Default path `./manifests/run-report.xlsx` (gitignored, next to
+  the manifest). Rejected: a bespoke column set or dropping the PRD's exact six.
+- **2026-08-18 · Session expiry keeps the existing pause/abort semantics; Phase 6 only makes them explicit +
+  actionable (AC-08).** Why: the live pause already happens at the navigation boundary (`gotoAuthenticated`
+  detects the login page and waits on a manual login + ENTER, up to `maxLoginAttempts`, then re-navigates =
+  "resume current country", §28). Only an ABANDONED login throws the fatal `LOGIN_REQUIRED`, which aborts the
+  batch — remaining countries are never processed, so they stay PENDING (not FAILED) and re-login + rerun
+  resumes via the manifest (§29). Phase 6 adds `summary.sessionExpired`, an actionable abort reason, a
+  `batch.session_expired` log, a console banner, and a report note — WITHOUT changing the FAILED-status flow
+  (so the existing batch-check LOGIN_REQUIRED test stays green). Rejected: a new PAUSED/PENDING country status
+  (schema ripple through manifest/resume/report for no functional gain — resume already re-runs non-SUCCESS).
+- **2026-08-18 · Phase 8 (interactive dynamic query builder) is the #1 next priority but is spec-locked
+  BEFORE any code.** Why: the request is detailed but has undefined edges — which dataset types (Time series /
+  Trade indicators / Companies / Trade in services) are in scope, the DYNAMIC per-run option lists (Data type,
+  Currency read live from the DOM), the Monthly "is there a login cookie?" signal, and the flow-aware filename
+  template (`india-export-country…` vs `india-import-country…`, which changes today's country-first convention).
+  CLAUDE.md forbids inventing these; they must be nailed to binary acceptance criteria first. Captured in
+  PHASES.md "Phase 8"; build is deferred to a dedicated spec-lock + build session. Rejected: building it inline
+  this session (would bake in guessed option lists + a filename template that conflicts with the shipped one).

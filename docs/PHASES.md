@@ -15,26 +15,27 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 4 — Batch loop + retry + failure evidence | ✅ DONE — headless 22/22 + live `--batch` proven via 4-country smoke (fresh Dominica SUCCESS) 2026-08-17 |
 | 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
-| 6 — Session-expiry + query gate + report | ⬜ todo — now polish (full run strained nothing); auto re-login + run-report.xlsx |
-| 8 — Interactive dynamic query builder | ⬜ TODO — **#1 PRIORITY** (needs spec-lock first); build after Phase 6 |
+| 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
+| 8 — Interactive dynamic query builder | ⬜ TODO — **#1 PRIORITY** (needs spec-lock first) |
 
 ## Now
-**Phase 7 DONE — the full 204-country production export ran and is verified.** `output/` holds **204 valid
-`.xlsx` files, 204/204 SUCCESS, 0 FAILED** (manifest `2026-08-17T14-35-29-629Z`, ~32 min, clean exit),
-uniformly named country-first
-(`Afghanistan__Imports-from-World__AllProducts__2001-01_to_2026-06__Monthly-Mirror-USD.xlsx`). Verified three
-ways: input(204)==manifest(204)==files(204); every SUCCESS→existing non-zero file; effective ranges vary
-(**47 FULL / 157 CLIPPED** = §39 isolation held); sample workbooks open. All code committed on `phase-1-poc`;
-build clean; **nothing pushed** — the deliverable files are gitignored (on disk, not git).
+**Phase 6 DONE (2026-08-18) — run report + session-expiry are in.** Each batch now writes a human-readable
+`run-report.xlsx` (PRD §31: Country · Requested · Effective · Range status · Status · Attempts · File · Error)
+next to the manifest, and an expired session is handled explicitly: the run pauses (manual re-login at the
+navigation boundary) and, if the login is abandoned, aborts with actionable resume guidance — remaining
+countries stay PENDING (never FAILED), so re-login + rerun resumes (AC-08). The query-validation gate was
+already live from Phase 3. Proven headless: `test:report` 8/8, `test:batch` 22/22, `test:manifest` 24/24;
+`tsc` clean. Committed on `phase-1-poc`; **not yet pushed**. (Phase 7's 204-file export is unaffected and
+still valid — do NOT re-run it.)
 
 ## Next 3
-1. **#1 — Make it durable: push a properly-named branch + open a PR.** `git checkout -b phase-7-full-export`
-   then `git push -u origin phase-7-full-export`. Do NOT re-run the export to "check" — re-verify by reading
-   `manifests/latest-run.json` (204/204 SUCCESS) instead.
-2. Phase 6 — session-expiry auto pause/resume (makes future runs truly hands-off) + `run-report.xlsx`
-   (§28/§31) + query-gate polish. Now polish, not rescue: the full run strained none of it.
-3. Optional: hand the 204 output files to whoever consumes them / move production output to the configured
-   `D:\TradeMap\Exports` target if that is where the deliverable belongs.
+1. **#1 — Phase 8: interactive dynamic query builder.** First run **spec-lock** (dataset-type coverage, the
+   live/dynamic option lists, the Monthly cookie-check signal, the flow-aware filename template), THEN build.
+   See the Phase 8 section below for the full captured requirement.
+2. **Make it durable: push a properly-named branch + open a PR** (carries Phases 1–7 + Phase 6). e.g.
+   `git checkout -b phase-6-report-and-resume` then `git push -u origin phase-6-report-and-resume`.
+3. Optional: verify the Phase 6 report live on the next real batch (`manifests/run-report.xlsx` appears and
+   lists every country); move production output to `D:\TradeMap\Exports` if that is the deliverable target.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress
