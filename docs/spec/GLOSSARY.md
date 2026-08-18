@@ -64,5 +64,28 @@ Terms below have ONE meaning in this project. Do not redefine them in later sess
   a fake `runCountry` + in-memory manifest. It is the Phase 5A demo; the live kill-and-resume run is Phase 5B.
 - **Effective vs requested filename** — generated filenames use the EFFECTIVE range so the
   name truthfully describes the file's contents. (PRD §19)
+- **Interactive mode** — `npm run export -- --interactive` (alias `-i`): confirm the country count
+  (pre-launch), launch the headed browser, then prompt the user through the query options against the
+  LIVE DOM, and drive the existing batch with those answers. Refuses on a non-TTY stdin
+  (`INTERACTIVE_REQUIRES_TTY`, exit 2, no browser). `--batch`/`--country` are unaffected.
+  (`src/cli/prompt.ts`) — introduced Phase 8.
+- **Run plan** — the in-memory `RunPlan` (`src/config/runPlan.ts`) built from the interactive answers;
+  it OVERRIDES `config.filters` + `datePolicy` for that one run only, then the unchanged
+  `runBatch`/`runCountry` engine runs on it. Answers are never persisted (each run re-prompts). — Phase 8.
+- **Live option lists** — the advanced-option values (Data source, Data type, Currency, …) are READ
+  from the live Angular CDK overlay / mat-menu after each dependent choice, never guessed
+  (`src/trademap/optionsReader.ts`). On a selector miss/offline the reader falls back to the locked
+  static list for that control and logs `options.fallback` — never aborts, never auto-picks. — Phase 8.
+- **Flow-aware filename** — the interactive default template
+  `{countrySlug}-{flowWord}-{viewWord}__{startPretty}_to_{endPretty}__{timeWord}-{sourceWord}-{currency}.{extension}`
+  (e.g. `india-export-country__2001-01_to_2026-06__monthly-mirror-USD.xlsx`). New tokens: `flowWord`
+  (imports→import, exports→export), `viewWord` (exporter→country, product→product), `timeWord`
+  (monthly/quarterly/yearly), `sourceWord` (mirror/direct). The country-first template stays valid and
+  unchanged for `--batch`/`--country`. (Extends PRD §19) — Phase 8.
+- **Monthly login signal** — when the user picks Monthly, `isLoginPage(page)` is checked on the open
+  post-launch page; if it looks like the login page (or no trademap cookie), a soft WARN is printed and
+  the run CONTINUES (never hard-fails). Uses the login-PAGE signal, not an "am I logged in?" guess. — Phase 8.
+- **Dataset coverage** — of the four datasets prompted (Time series, Trade indicators, Companies, Trade
+  in services) only **Time series** is built in Phase 8; choosing another exits 2 with `DATASET_UNSUPPORTED`. — Phase 8.
 - **Done** — see CLAUDE.md: build compiles clean, phase acceptance criteria pass, and (for
   export phases) a real validated `.xlsx` exists — not merely "download event fired".
