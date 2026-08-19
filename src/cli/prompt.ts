@@ -189,9 +189,11 @@ export async function collectRunPlan(
   const freqIdx = await chooseFromMenu(ask, 'Time', FREQUENCY_OPTIONS, FREQUENCY_DEFAULT_INDEX);
   const frequency = FREQUENCY_OPTIONS[freqIdx].toLowerCase(); // 'yearly' | 'quarterly' | 'monthly'
 
-  // Row 9 — Monthly login signal. Soft WARN only; never hard-fail.
+  // Row 9 + Row 24 — Monthly is a PRO-locked feature ("Monthly 🔒PRO"), so the signal is
+  // "needs a PRO account", not merely "needs login". Soft WARN only, using the login-PAGE
+  // signal the codebase already trusts (never guess "am I logged in"); never hard-fail.
   if (frequency === 'monthly' && (await isLoginPage(page).catch(() => false))) {
-    const warning = 'Monthly data needs a login — log in when the run pauses';
+    const warning = 'Monthly is a PRO-locked feature — it needs a PRO Trade Map account; log in with one when the run pauses';
     log('warn', 'auth.monthly_login_warning', { message: warning });
     process.stdout.write(`\n[WARNING] ${warning}\n`);
   }

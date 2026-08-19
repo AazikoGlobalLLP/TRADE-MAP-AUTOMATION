@@ -41,7 +41,9 @@
     "maxAttemptsPerCountry": 3,
     "retryDelayMs": 2000,
     "continueOnFailure": true,
-    "evidenceDir": "./screenshots/failures"
+    "evidenceDir": "./screenshots/failures",
+    "throttleEvery": 5,
+    "throttlePauseMs": 120000
   },
 
   "manifestFile": "./manifests/latest-run.json",

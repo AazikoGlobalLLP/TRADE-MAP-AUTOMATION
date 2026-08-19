@@ -138,11 +138,15 @@ export async function runBatch(
   deps: BatchDeps = defaultBatchDeps,
   force = false,
 ): Promise<BatchSummary> {
-  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir } = config.batch;
+  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir, throttleEvery, throttlePauseMs } =
+    config.batch;
   const outcomes: CountryOutcome[] = [];
   let aborted = false;
   let abortReason: string | undefined;
   let sessionExpired = false;
+  // Anti-block throttle bookkeeping (Phase 9, spec row 23): count only countries that actually
+  // hit the browser, so a resume run (mostly early-skips) inserts no pointless pauses.
+  let worked = 0;
 
   const requestedRange = `${global.requestedStart}-${global.requestedEnd}`;
   // `--force` overrides the collision mode to `overwrite` for the whole run (spec-lock row 4).
@@ -179,6 +183,7 @@ export async function runBatch(
     collisionMode,
     force,
     manifest: manifestEnabled ? manifestPath : 'disabled',
+    throttle: throttleEvery > 0 ? `every ${throttleEvery} for ${throttlePauseMs}ms` : 'disabled',
   });
 
   for (let idx = 0; idx < countries.length; idx++) {
@@ -288,6 +293,16 @@ export async function runBatch(
       outcomes.push(oc);
       recordAndPersist(oc);
       break;
+    }
+
+    // Anti-block throttle (Phase 9, spec row 23): pause between country exports so a long run
+    // spreads load and does not get the account blocked. Only countries that reached runCountry
+    // count (an early resume-skip `continue`s above; abort/stop `break`s out before here). Never
+    // pause after the final country. A politeness buffer, NEVER a limit-bypass (CLAUDE.md).
+    worked += 1;
+    if (throttleEvery > 0 && worked % throttleEvery === 0 && idx < countries.length - 1) {
+      log('info', 'batch.throttle', { afterCountry: country, worked, pauseMs: throttlePauseMs });
+      await deps.sleep(throttlePauseMs);
     }
   }
 

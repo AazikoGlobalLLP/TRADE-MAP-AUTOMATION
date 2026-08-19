@@ -105,6 +105,9 @@ export function parseFiltersFromUrl(url: string, filters: FiltersConfig): Filter
   const viewBy = r[i++];
   const freq = r[i++];
   i++; // range segment (verified separately against the served columns)
+  // byProduct inserts an extra {detail} segment between range and source (Phase 9, spec row 21);
+  // skip it so source/dataType/currency read from the correct positions. byPartner has no such segment.
+  if (viewBy !== undefined && viewBy.toLowerCase() === 'byproduct') i++;
   const source = r[i++];
   const dataType = r[i++];
   const currency = r[i++];

@@ -11,6 +11,7 @@ import { runBatch, renderSummaryTable, BatchDeps } from './runBatch';
 import { withRetry, isRetryable } from './retry';
 import { normalizeCountryList, readCountries } from '../input/readCountries';
 import { captureFailure, EvidencePage } from '../evidence/captureFailure';
+import { emptyManifest, upsertEntry } from '../manifest/manifest';
 
 // ---------------------------------------------------------------------------
 // Batch harness (Phase 4A demo). Proves the batch loop / retry / evidence /
@@ -296,6 +297,61 @@ void (async () => {
     assert.equal(s.outcomes[0].attempts, 5);
     assert.equal(captureCalls.length, 5);
     assert.equal(s.exitCode, 1);
+  });
+
+  // -------------------------------------------------------------------------
+  process.stdout.write('\nAnti-block throttle (Phase 9, spec row 23):\n');
+
+  await check('throttle: pauses after every N countries that ran, never after the last', async () => {
+    const sleeps: number[] = [];
+    const deps: BatchDeps = {
+      runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
+      captureFailure: async () => null,
+      sleep: async (ms) => void sleeps.push(ms),
+    };
+    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D', 'E'], GLOBAL, cfg({ throttleEvery: 2, throttlePauseMs: 120000 }), CODES, log, 'run-thr', deps);
+    assert.equal(s.success, 5);
+    // worked hits 2 (after B) and 4 (after D) → two 120s pauses; NEVER after E (the last country).
+    assert.deepEqual(sleeps, [120000, 120000]);
+  });
+
+  await check('throttle: throttleEvery=0 disables the pause entirely', async () => {
+    const sleeps: number[] = [];
+    const deps: BatchDeps = {
+      runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
+      captureFailure: async () => null,
+      sleep: async (ms) => void sleeps.push(ms),
+    };
+    const s = await runBatch(PAGE, ['A', 'B', 'C'], GLOBAL, cfg({ throttleEvery: 0, throttlePauseMs: 120000 }), CODES, log, 'run-thr0', deps);
+    assert.equal(s.success, 3);
+    assert.deepEqual(sleeps, []);
+  });
+
+  await check('throttle: resume-SKIPPED countries do not count toward the cadence', async () => {
+    const sleeps: number[] = [];
+    // A and B are already SUCCESS+valid → both early-skip (attempts 0, `continue` before the throttle).
+    const seed = upsertEntry(
+      upsertEntry(emptyManifest('seed', '200001-202606', 'now'), {
+        country: 'A', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'A.xlsx', targetPath: '/out/A.xlsx',
+      }),
+      { country: 'B', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'B.xlsx', targetPath: '/out/B.xlsx' },
+    );
+    const deps: BatchDeps = {
+      runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
+      captureFailure: async () => null,
+      sleep: async (ms) => void sleeps.push(ms),
+      loadManifest: () => seed,
+      writeManifest: () => undefined,
+      validateFile: async () => true,
+      now: () => 'now',
+    };
+    const config: AppConfig = { ...cfg({ throttleEvery: 2, throttlePauseMs: 120000 }), manifestFile: './manifests/thr.json' };
+    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D', 'E'], GLOBAL, config, CODES, log, 'run-thr-skip', deps);
+    assert.equal(s.skipped, 2); // A, B early-skipped
+    assert.equal(s.success, 3); // C, D, E ran
+    // Only the 3 that RAN count: worked C=1, D=2 → one pause after D; E=3, no pause. If skips
+    // counted, pauses would fall after B and D (two) — exactly one pause proves skips are excluded.
+    assert.deepEqual(sleeps, [120000]);
   });
 
   // -------------------------------------------------------------------------

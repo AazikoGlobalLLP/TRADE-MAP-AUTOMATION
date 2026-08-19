@@ -148,6 +148,14 @@ void (async () => {
     assert.equal(eff.filters.view, 'table');
   });
 
+  await check('applyRunPlan threads Detail into filters for Product view; Exporter has none (rows 21,22)', () => {
+    const product = applyRunPlan(cfg(), { ...DEFAULT_ANSWERS, viewBy: 'product', detail: 'HS6' });
+    assert.equal(product.filters.detail, 'HS6'); // byProduct URL builder needs this
+    // Exporter (no detail answer) must NOT carry a stray detail on filters → byPartner URL unaffected.
+    const exporter = applyRunPlan(cfg(), { ...DEFAULT_ANSWERS, viewBy: 'exporter' });
+    assert.equal('detail' in exporter.filters, false);
+  });
+
   await check('applyRunPlan does NOT mutate the input config (isolation, convention #2)', () => {
     const original = cfg();
     applyRunPlan(original, { ...DEFAULT_ANSWERS, tradeFlow: 'exports', requestedStart: '201501' });

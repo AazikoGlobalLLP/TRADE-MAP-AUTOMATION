@@ -17,6 +17,8 @@ const FATAL_MARKERS = [
   'BATCH_EMPTY',
   'BATCH_INPUT_MISSING',
   'CONFIG_INVALID',
+  'DETAIL_TOKEN_UNCAPTURED', // Phase 9: uncaptured/invented byProduct Detail token — every country fails identically
+  'DETAIL_REQUIRED', // Phase 9: a byProduct query with no Detail value — a config error, not transient
 ];
 
 /**

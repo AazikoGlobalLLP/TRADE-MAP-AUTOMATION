@@ -23,18 +23,56 @@ export interface UrlFilters {
   dataType: string;
   currency: string;
   view: string;
+  detail?: string; // Phase 9: product-detail granularity — ONLY used when viewBy=product (byProduct)
 }
 
 // Trade Map URL vocabulary. Map config words → the tokens the site's URL uses.
 const FREQ_URL: Record<string, string> = { monthly: 'month', quarterly: 'quarter', yearly: 'year' };
 const VIEWBY_URL: Record<string, string> = { exporter: 'byPartner', product: 'byProduct' };
 
+// Detail (product-detail granularity) URL tokens for the byProduct view (Phase 9, spec row 21).
+// Decoded from the user's real byProduct URL, which showed HS2 encoded as `2`; by the same
+// scheme HS4=`4`, HS6=`6`. NTL is DELIBERATELY ABSENT: its URL token has never been captured,
+// and inventing one is forbidden (CLAUDE.md — "never invent a … field name … not written down").
+const DETAIL_URL_TOKENS: Record<string, string> = { hs2: '2', hs4: '4', hs6: '6' };
+
+/**
+ * PURE. Map a Detail label (NTL / HS2 / HS4 / HS6) to its byProduct URL token.
+ * Throws `DETAIL_TOKEN_UNCAPTURED` for NTL (token not yet captured) or any unknown value,
+ * so a Product-view run fails LOUD rather than exporting a guessed/invented URL. The user
+ * chose "hard-error" over silently substituting HS6 — this is the single enforcement point.
+ */
+export function resolveDetailUrlToken(detail: string): string {
+  const key = detail.trim().toLowerCase();
+  const token = DETAIL_URL_TOKENS[key];
+  if (token) return token;
+  if (key === 'ntl') {
+    throw new Error(
+      'DETAIL_TOKEN_UNCAPTURED: the byProduct URL token for Detail=NTL has not been captured yet. ' +
+        'Capture one real …/byProduct/{freq}/{range}/<NTL-token>/… URL from a logged-in session and add it ' +
+        'to DETAIL_URL_TOKENS in driver.ts before running an NTL byProduct export — never invent it (CLAUDE.md). ' +
+        'Choose Detail=HS6 instead if you do not need national-tariff-line granularity.',
+    );
+  }
+  throw new Error(
+    `DETAIL_TOKEN_UNCAPTURED: unknown Detail value "${detail}" — no known byProduct URL token. ` +
+      'Known tokens: HS2, HS4, HS6. NTL is uncaptured. Capture a real URL before wiring a new Detail value.',
+  );
+}
+
 /**
  * Build the canonical Trade Map query URL (PRD §6). This is our PRIMARY, deterministic
  * way to set the full query state, immune to stale dropdown carryover.
  *
- * Produces e.g.:
+ * Produces e.g. (byPartner / View by = Exporter):
  *   https://www.trademap.org/en/goods/time-series/imports/c/212/c/000/p/ALL/byPartner/month/200001-202606/mirror/values/USD/table
+ *
+ * byProduct (View by = Product) INSERTS a Detail segment between range and source
+ * (Phase 9, spec row 21, decoded from the user's real URL) — byPartner has none:
+ *   …/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}
+ * The range is emitted as the explicit YYYYMM-YYYYMM window (consistent with byPartner and the
+ * frozen GLOBAL range). NOTE: the user's captured byProduct URL used the literal `default`
+ * there (= MAX); whether byProduct honours an explicit range is a HEADED calibration follow-up.
  *
  * RISK: the live path segments may differ from the PRD template — verify against a real
  * logged-in query before trusting URL-navigation, and fall back to dropdown driving.
@@ -49,7 +87,7 @@ export function buildCanonicalUrl(
   const freq = FREQ_URL[filters.frequency] ?? filters.frequency;
   const viewBy = VIEWBY_URL[filters.viewBy] ?? filters.viewBy;
   const root = baseUrl.replace(/\/+$/, '');
-  return [
+  const segments = [
     root,
     'en',
     'goods',
@@ -64,11 +102,17 @@ export function buildCanonicalUrl(
     viewBy,
     freq,
     `${start}-${end}`,
-    filters.source,
-    filters.dataType,
-    filters.currency,
-    filters.view,
-  ].join('/');
+  ];
+  // byProduct inserts a Detail segment here (spec row 21); byPartner has none. Resolving the
+  // token throws for NTL/unknown (never invent), so a Product-view run cannot ship a guessed URL.
+  if (viewBy === 'byProduct') {
+    if (!filters.detail) {
+      throw new Error('DETAIL_REQUIRED: a byProduct (View by = Product) query needs a Detail value (e.g. HS6) — none was set.');
+    }
+    segments.push(resolveDetailUrlToken(filters.detail));
+  }
+  segments.push(filters.source, filters.dataType, filters.currency, filters.view);
+  return segments.join('/');
 }
 
 /**

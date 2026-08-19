@@ -8,6 +8,7 @@ import {
 } from '../trademap/rangeEngine';
 import { assertQueryValid, ExpectedQuery, ActualQuery } from '../trademap/verifyQuery';
 import { expectedFilters, filterMismatches, parseFiltersFromUrl } from '../trademap/filters';
+import { buildCanonicalUrl, resolveDetailUrlToken } from '../trademap/driver';
 import { dataMonthsRange } from '../files/effective-range';
 import { FiltersConfig } from '../config/schema';
 
@@ -225,6 +226,58 @@ check('dataMonthsRange: any non-zero row keeps the month; all-zero/empty → nul
 check('file range 200003-202606 → CLIPPED vs global; 200001-202606 → FULL', () => {
   assert.equal(computeEffectiveRange(GLOBAL, { start: '200003', end: '202606' }).status, 'CLIPPED_BY_AVAILABILITY');
   assert.equal(computeEffectiveRange(GLOBAL, { start: '200001', end: '202606' }).status, 'FULL_RANGE');
+});
+
+// ---------------------------------------------------------------------------
+process.stdout.write('\nbyProduct URL wiring + Detail token (Phase 9, spec rows 21-22):\n');
+
+// byPartner (View by = Exporter) shape is UNCHANGED — no detail segment (regression guard).
+check('buildCanonicalUrl(byPartner) is unchanged — no Detail segment', () => {
+  const url = buildCanonicalUrl('https://www.trademap.org', '586', FILTERS, '200801', '202512');
+  assert.equal(
+    url,
+    'https://www.trademap.org/en/goods/time-series/imports/c/586/c/000/p/ALL/byPartner/month/200801-202512/mirror/values/USD/table',
+  );
+});
+
+// byProduct (View by = Product) INSERTS the Detail token between range and source (row 21).
+const PRODUCT_FILTERS: FiltersConfig = { ...FILTERS, tradeFlow: 'exports', viewBy: 'product', source: 'direct', detail: 'HS6' };
+
+check('buildCanonicalUrl(byProduct) inserts the Detail token between range and source', () => {
+  const url = buildCanonicalUrl('https://www.trademap.org', '842', PRODUCT_FILTERS, '200001', '202606');
+  assert.equal(
+    url,
+    'https://www.trademap.org/en/goods/time-series/exports/c/842/c/000/p/ALL/byProduct/month/200001-202606/6/direct/values/USD/table',
+  );
+});
+
+check('parseFiltersFromUrl round-trips a well-formed byProduct URL (detail segment skipped)', () => {
+  const url = buildCanonicalUrl('https://www.trademap.org', '842', PRODUCT_FILTERS, '200001', '202606');
+  const parsed = parseFiltersFromUrl(url, PRODUCT_FILTERS);
+  // source/dataType/currency must read from the RIGHT positions despite the extra {detail} segment.
+  assert.deepEqual(filterMismatches(expectedFilters(PRODUCT_FILTERS), parsed), []);
+  assert.equal(parsed.viewBy, 'product');
+  assert.equal(parsed.source, 'direct'); // NOT the '6' detail token
+});
+
+check('resolveDetailUrlToken maps HS2/HS4/HS6; NTL + unknown throw DETAIL_TOKEN_UNCAPTURED', () => {
+  assert.equal(resolveDetailUrlToken('HS2'), '2');
+  assert.equal(resolveDetailUrlToken('hs4'), '4');
+  assert.equal(resolveDetailUrlToken('HS6'), '6');
+  assert.throws(() => resolveDetailUrlToken('NTL'), /DETAIL_TOKEN_UNCAPTURED/);
+  assert.throws(() => resolveDetailUrlToken('HS8'), /DETAIL_TOKEN_UNCAPTURED/);
+});
+
+check('buildCanonicalUrl(byProduct, Detail=NTL) hard-errors — never invents a token', () => {
+  assert.throws(
+    () => buildCanonicalUrl('https://www.trademap.org', '842', { ...PRODUCT_FILTERS, detail: 'NTL' }, '200001', '202606'),
+    /DETAIL_TOKEN_UNCAPTURED/,
+  );
+});
+
+check('buildCanonicalUrl(byProduct) with no Detail set → DETAIL_REQUIRED', () => {
+  const noDetail: FiltersConfig = { ...PRODUCT_FILTERS, detail: undefined };
+  assert.throws(() => buildCanonicalUrl('https://www.trademap.org', '842', noDetail, '200001', '202606'), /DETAIL_REQUIRED/);
 });
 
 process.stdout.write(`\nIsolation harness: ${passed} passed, ${failures.length} failed\n`);

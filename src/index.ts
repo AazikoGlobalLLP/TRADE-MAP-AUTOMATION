@@ -10,6 +10,7 @@ import { runBatch, renderSummaryTable } from './orchestrator/runBatch';
 import { writeRunReport } from './report/runReport';
 import { confirmProceed, collectRunPlan, createStdinAsk } from './cli/prompt';
 import { applyRunPlan, describePlan } from './config/runPlan';
+import { resolveDetailUrlToken } from './trademap/driver';
 
 // ---------------------------------------------------------------------------
 // Tiny CLI arg reader: --key value
@@ -100,6 +101,22 @@ async function main(): Promise<void> {
           log,
         );
         log('info', 'plan.confirmed', { plan: describePlan(answers) });
+
+        // Phase 9 (spec rows 21,22) — byProduct (View by = Product) needs a Detail URL token.
+        // Resolve it BEFORE any browser export so an uncaptured token (NTL) refuses the whole
+        // run up front instead of hitting every country. The user chose "hard-error" over
+        // silently substituting HS6; HS2/HS4/HS6 resolve fine. Never invents a token (CLAUDE.md).
+        if (answers.viewBy === 'product') {
+          try {
+            resolveDetailUrlToken(answers.detail ?? '');
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            log('error', 'plan.detail_unsupported', { detail: answers.detail, error: msg });
+            process.stderr.write(msg + '\n');
+            process.exitCode = 2;
+            return;
+          }
+        }
 
         // Row 15 — answers → effective config; the untouched engine runs it. The
         // plan's range is the new immutable GLOBAL for this run (convention #2).
@@ -211,9 +228,12 @@ main().catch((err: unknown) => {
   process.stderr.write(
     JSON.stringify({ ts: new Date().toISOString(), level: 'error', event: 'run.failed', error: message }) + '\n',
   );
-  // A bad/empty batch input file — or a Phase 8 dataset/TTY abort — is an abort (exit 2),
-  // not a run failure (exit 1). (Phase 4 spec row 3; Phase 8 spec rows 2,4.)
-  process.exitCode = /BATCH_EMPTY|BATCH_INPUT_MISSING|DATASET_UNSUPPORTED|INTERACTIVE_REQUIRES_TTY/.test(message)
+  // A bad/empty batch input file — or a Phase 8 dataset/TTY abort, or a Phase 9 uncaptured/absent
+  // byProduct Detail token — is an abort (exit 2), not a run failure (exit 1). (Phase 4 spec row 3;
+  // Phase 8 spec rows 2,4; Phase 9 spec rows 21,22.)
+  process.exitCode = /BATCH_EMPTY|BATCH_INPUT_MISSING|DATASET_UNSUPPORTED|INTERACTIVE_REQUIRES_TTY|DETAIL_TOKEN_UNCAPTURED|DETAIL_REQUIRED/.test(
+    message,
+  )
     ? 2
     : 1;
 });

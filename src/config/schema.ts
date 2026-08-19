@@ -20,6 +20,7 @@ export interface FiltersConfig {
   dataType: string;
   currency: string;
   view: string;
+  detail?: string; // Phase 9: product-detail granularity (NTL/HS2/HS4/HS6) — only for viewBy=product
 }
 
 export interface DatePolicy {
@@ -48,6 +49,8 @@ export interface BatchConfig {
   retryDelayMs: number; // inter-attempt backoff (not a state-wait)
   continueOnFailure: boolean; // false → the first FAILED country aborts the batch
   evidenceDir: string; // base dir for failure screenshots + JSON
+  throttleEvery: number; // Phase 9 (spec row 23): pause after every N countries that ran (0 = disabled)
+  throttlePauseMs: number; // Phase 9: how long each anti-block pause lasts, in ms
 }
 
 export interface AppConfig {
@@ -72,13 +75,15 @@ export const DEFAULT_MANIFEST_FILE = './manifests/latest-run.json';
 /** Default human-readable run-report path (Phase 6, §31). Applied by validateConfig when unset. */
 export const DEFAULT_RUN_REPORT_FILE = './manifests/run-report.xlsx';
 
-/** Defaults for the optional `batch` block (spec-lock row 11). */
+/** Defaults for the optional `batch` block (spec-lock row 11; Phase 9 row 23 throttle N=5/M=120s). */
 export const BATCH_DEFAULTS: BatchConfig = {
   inputFile: './input/countries.xlsx',
   maxAttemptsPerCountry: 3,
   retryDelayMs: 2000,
   continueOnFailure: true,
   evidenceDir: './screenshots/failures',
+  throttleEvery: 5, // spec-locked at build 2026-08-19: pause after every 5 countries
+  throttlePauseMs: 120000, // spec-locked at build 2026-08-19: 120-second anti-block pause
 };
 
 /** The only range mode the PRD defines (§14). Unknown modes are rejected. */
@@ -168,6 +173,8 @@ export function validateConfig(raw: unknown): AppConfig {
   for (const key of FILTER_KEYS) {
     filters[key] = reqString(rawFilters[key], `filters.${key}`);
   }
+  // detail — optional (Phase 9); only meaningful for viewBy=product. Non-empty string if present.
+  if (rawFilters.detail !== undefined) filters.detail = reqString(rawFilters.detail, 'filters.detail');
 
   // datePolicy — YYYYMM start/end, start ≤ end, known mode.
   const rawDate = reqObject(c.datePolicy, 'datePolicy');
@@ -234,6 +241,21 @@ export function validateConfig(raw: unknown): AppConfig {
       batch.continueOnFailure = reqBoolean(rawBatch.continueOnFailure, 'batch.continueOnFailure');
     }
     if (rawBatch.evidenceDir !== undefined) batch.evidenceDir = reqString(rawBatch.evidenceDir, 'batch.evidenceDir');
+    // Phase 9 (row 23) anti-block throttle. Both non-negative integers; 0 disables the pause.
+    if (rawBatch.throttleEvery !== undefined) {
+      const v = rawBatch.throttleEvery;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
+        throw new ConfigError('batch.throttleEvery', 'must be a non-negative integer (0 disables the throttle)');
+      }
+      batch.throttleEvery = v;
+    }
+    if (rawBatch.throttlePauseMs !== undefined) {
+      const v = rawBatch.throttlePauseMs;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
+        throw new ConfigError('batch.throttlePauseMs', 'must be a non-negative integer (milliseconds)');
+      }
+      batch.throttlePauseMs = v;
+    }
   }
 
   return {

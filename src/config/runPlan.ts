@@ -69,13 +69,13 @@ export const CURRENCY_DEFAULT_LABEL = 'USD'; // spec row 12
 export const NUMBERS_DISPLAY_OPTIONS = ['Smart', 'Thousands', 'Millions'] as const;
 export const NUMBERS_DISPLAY_DEFAULT_INDEX = 0; // Smart (spec row 13)
 
-// Detail — asked ONLY when View by = Product (spec row 19). We do NOT invent the
-// option list: the only value the requirement gives is the default NTL, so the
-// fallback is just ['NTL']; the real list is read live once optionsReader is
-// calibrated. The URL encoding of Detail is UNKNOWN until a real byProduct URL is
-// captured, so a Product-view run is not yet a working export (flagged in the spec).
-export const DETAIL_OPTIONS_FALLBACK = ['NTL'] as const;
-export const DETAIL_DEFAULT_LABEL = 'NTL'; // spec row 19
+// Detail — asked ONLY when View by = Product (spec rows 19, 22). Fallback list is the two
+// values the spec fixes: NTL (preferred) and HS6 (the safe fallback when NTL isn't offered);
+// the live reader replaces it once optionsReader is calibrated. URL tokens: HS2/HS4/HS6 are
+// known (driver.DETAIL_URL_TOKENS); NTL's is UNCAPTURED, so an NTL byProduct run hard-errors
+// (user's spec-lock-at-build choice 2026-08-19) rather than exporting a guessed URL.
+export const DETAIL_OPTIONS_FALLBACK = ['NTL', 'HS6'] as const;
+export const DETAIL_DEFAULT_LABEL = 'NTL'; // spec row 19 (default); row 22 fallback = HS6
 
 /**
  * The flow-aware default filename template for interactive runs (spec row 16).
@@ -151,6 +151,9 @@ export function applyRunPlan(config: AppConfig, answers: RunPlanAnswers): AppCon
       source: answers.dataSource,
       dataType: answers.dataType,
       currency: answers.currency,
+      // Phase 9 (spec row 21): thread the chosen Detail into filters so buildCanonicalUrl can
+      // insert the byProduct Detail segment. Only present for Product view (Exporter has no detail).
+      ...(answers.detail !== undefined ? { detail: answers.detail } : {}),
     },
     datePolicy: {
       ...config.datePolicy,
