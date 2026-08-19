@@ -68,18 +68,23 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
   `…/time-series/exports/c/000/c/000/p/ALL/byProduct/year/default/2/direct/values/USD/table` — it inserts a
   **Detail** segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
   byPartner has none. `buildCanonicalUrl` (driver.ts) now branches on `viewBy=product` to insert it and
-  `parseFiltersFromUrl` (filters.ts) skips it. Detail tokens HS2=`2`, HS4=`4`, HS6=`6` (in `DETAIL_URL_TOKENS`);
-  **NTL's token is STILL UNKNOWN** — `resolveDetailUrlToken('NTL')` HARD-ERRORS (`DETAIL_TOKEN_UNCAPTURED`), never
-  invents/substitutes (user's choice 2026-08-19). To enable NTL: capture a real `Detail=NTL` URL, add its token to
-  `DETAIL_URL_TOKENS`. Range is emitted explicitly as `YYYYMM-YYYYMM`; the captured URL used the literal `default`
-  (=MAX) — whether byProduct requires `default` is a HEADED follow-up. Detail default = NTL, fallback = HS6.
+  `parseFiltersFromUrl` (filters.ts) skips it. Detail tokens (all from REAL captured URLs, never invented, in
+  `DETAIL_URL_TOKENS`): **NTL=`10`** (captured 2026-08-19 from a real India `c/699` imports byProduct URL
+  `…/byProduct/month/200704-202605/10/direct/…`; `buildCanonicalUrl` reproduces it byte-for-byte), HS2=`2`, HS4=`4`, HS6=`6`.
+  Any STILL-uncaptured level (e.g. HS8) → `resolveDetailUrlToken` HARD-ERRORS (`DETAIL_TOKEN_UNCAPTURED`), never
+  invents/substitutes. To add one: capture its real URL, add the token to `DETAIL_URL_TOKENS`. Range is emitted
+  explicitly as `YYYYMM-YYYYMM`; the captured URLs used the literal `default` (=MAX) too — whether byProduct requires
+  `default` is a HEADED follow-up. Detail default = NTL.
   **STILL HEADED (uncalibrated):** the live-DOM questionnaire, and `readShownRange`/heading against the byProduct table.
 - **Monthly frequency is PRO-locked** (the beta shows "Monthly 🔒PRO"). The Monthly signal is "needs a PRO account",
   not just "needs login". Yearly/Quarterly are free.
 - **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out. The
-  anti-block THROTTLE now exists (Phase 9): `runBatch` pauses `batch.throttlePauseMs` (default 120000) after every
-  `batch.throttleEvery` (default 5) countries that actually ran — resume-skips don't count, never after the last,
-  `0` disables. Tune it in config only, no code. This is a politeness throttle, NEVER a limit-bypass (compliance boundary).
+  RANDOMIZED anti-block THROTTLE now exists (Phase 9): `runBatch` takes a break after a random
+  `batch.throttleEveryMin..throttleEveryMax` (default 1–5) countries that ran, for a random
+  `batch.throttlePauseMinMs..throttlePauseMaxMs` (default 120000–420000 = 2–7 min); both re-drawn each break. The pause
+  is taken BEFORE the next run, so resume-skips never waste a pause and none trails the last country. `throttleEveryMax=0`
+  disables. RNG is injected (`BatchDeps.random`) for deterministic tests. Tune in config only, no code. A politeness
+  throttle, NEVER a limit-bypass (compliance boundary).
 
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.

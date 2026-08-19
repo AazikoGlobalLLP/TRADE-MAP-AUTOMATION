@@ -286,12 +286,22 @@ Format: date · decision · why · alternative rejected.
   in the handoff turn: the DOM-extraction + byProduct calibration need a live headed session (the user's), and the exact
   throttle N + pause M are spec-lock-at-build values. Rejected: half-implementing during handoff / guessing the throttle
   numbers or the NTL token.
-- **2026-08-19 · Phase 9 build spec-lock — throttle N=5 / M=120000 ms; Detail=NTL hard-errors.** Why: user chose (a) pause
-  after every **5** countries for **120 s** (`batch.throttleEvery`/`throttlePauseMs`, injectable-`sleep`-driven, counts only
-  countries that ran, never after the last, `0` disables — a politeness pause, never a bypass), and (b) when NTL's byProduct
-  URL token is uncaptured, **HARD-ERROR the run** (`resolveDetailUrlToken` throws `DETAIL_TOKEN_UNCAPTURED`; interactive path
-  refuses before any browser export, exit 2; `--batch` fails fast via a fatal marker) rather than silently substituting HS6.
-  Rejected: substituting HS6 under an NTL request (exports coarser data than asked) and inventing the NTL token (CLAUDE.md).
+- **2026-08-19 · Phase 9 build spec-lock — throttle N=5 / M=120000 ms; Detail=NTL hard-errors.** ⚠️ SUPERSEDED same day by
+  the two entries below (user refined to a randomized throttle and then captured the real NTL URL). Kept for history.
+  Was: pause after every 5 countries for 120 s; NTL hard-errors while its token is uncaptured.
+- **2026-08-19 · Phase 9 (revised) · RANDOMIZED anti-block throttle.** Why: user asked for a randomized cadence — a break
+  after a random **1–5** countries that ran, for a random **2–7 minutes**, both re-drawn each break ("yeh change hote rehne
+  chaiye", example 4,1,2,5). Config `batch.throttleEveryMin/Max` + `throttlePauseMinMs/MaxMs` (defaults 1/5, 120000/420000);
+  `throttleEveryMax=0` disables. RNG injected via `BatchDeps.random` (offline-deterministic). The pause is taken BEFORE the
+  next run (not after), which structurally prevents wasted trailing pauses on resume runs and any pause after the last country
+  (fixes 3 adversarial-review findings). Compliance: a randomized POLITENESS pause that spreads load, never a limit-bypass.
+  Rejected: fixed cadence (row 25/26) as too fingerprintable; a tail-of-loop pause (had the review's trailing-pause defects).
+- **2026-08-19 · Phase 9 (revised) · Detail=NTL URL token = `10`, captured from a real URL.** Why: user provided a real India
+  (`c/699`) imports byProduct URL `…/byProduct/month/200704-202605/10/direct/values/USD/table` and confirmed the Detail dropdown
+  was NTL, so `DETAIL_URL_TOKENS.ntl = '10'`. NTL byProduct exports now build a real URL (no longer hard-error). HS2/HS4/HS6 =
+  2/4/6. Any STILL-uncaptured level (e.g. HS8) hard-errors `DETAIL_TOKEN_UNCAPTURED` — never invented, never substituted.
+  `buildCanonicalUrl` reproduces this exact URL byte-for-byte (regression-tested). Rejected: assuming `10` = NTL without the
+  user's confirmation (`10` is opaque vs HS2/4/6; India's NTL is 8-digit, so the mapping needed confirming, not guessing).
 - **2026-08-19 · byProduct URL wired by decoding the user's real URL; range emitted explicitly, not `default`.** Why: byProduct
   inserts a `{detail}` segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
   `buildCanonicalUrl` branches on it and `parseFiltersFromUrl` skips it so the query gate reads the right positions. Detail
