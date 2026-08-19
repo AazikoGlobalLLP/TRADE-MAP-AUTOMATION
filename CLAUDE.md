@@ -63,6 +63,17 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
 - To VERIFY a finished export, read `manifests/latest-run.json` + the files on disk — do NOT re-run
   the export "just to check" (it re-downloads all 204). Acceptance = input count == manifest entries
   == files on disk, every SUCCESS→existing non-zero file, effective ranges vary (isolation held).
+- The whole pipeline is calibrated for **View by = Exporter (byPartner)** ONLY. **View by = Product (byProduct)
+  is a DIFFERENT URL shape** and errors until calibrated. Real byProduct URL (confirmed 2026-08-19):
+  `…/time-series/exports/c/000/c/000/p/ALL/byProduct/year/default/2/direct/values/USD/table` — it inserts a
+  **Detail** segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
+  byPartner has none. Detail HS2=`2`, HS4=`4`, HS6=`6`; **NTL's token is UNKNOWN — capture a real `Detail=NTL` URL,
+  never invent it.** Range may be the literal `default` (=MAX). Detail default = NTL, fallback = HS6.
+- **Monthly frequency is PRO-locked** (the beta shows "Monthly 🔒PRO"). The Monthly signal is "needs a PRO account",
+  not just "needs login". Yearly/Quarterly are free.
+- **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out; and a long
+  run needs a THROTTLE between countries (a break every N countries — Phase 9 row 23). This is a politeness throttle,
+  never a limit-bypass (compliance boundary).
 
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.

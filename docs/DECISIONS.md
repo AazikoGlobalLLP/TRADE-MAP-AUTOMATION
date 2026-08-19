@@ -268,3 +268,21 @@ Format: date · decision · why · alternative rejected.
   works — no manifest-schema/resume change (manifest 24/24 unchanged). Rejected: adding a query signature to the
   manifest schema (backward-compat hole: existing signature-less entries still false-skip) and force-always
   (loses interactive resume).
+- **2026-08-18 · Phase 8 default path works live; only "View by = Product" errors (uncalibrated).** Why: a live
+  interactive run exported all 4 fixture countries (China/India/Pakistan/Dominica) SUCCESS with imports/byExporter.
+  The per-country errors the user saw come ONLY from View by = Product — the URL segment (`byProduct`), heading text,
+  and the month-column range reader (`readShownRange`) were calibrated for "by exporter" alone. The `options.fallback`
+  WARNs are EXPECTED (live option-read selectors uncalibrated), not failures. Rejected: guessing the byProduct URL.
+- **2026-08-19 · byProduct URL structure decoded from a real user-provided URL (Phase 9 input).** The real URL
+  `…/time-series/exports/c/000/c/000/p/ALL/byProduct/year/default/2/direct/values/USD/table` shows byProduct inserts
+  a **Detail** segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
+  byPartner has none. Detail HS2=`2` (⇒ HS4=`4`, HS6=`6`); NTL's token is still UNKNOWN. Range may be the literal `default`
+  (=MAX). Frequency `year`=Yearly; **Monthly is PRO-locked** (image "Monthly 🔒PRO"). Recorded for the Phase 9 build;
+  NTL token must be captured from a real `Detail=NTL` URL — never invented (CLAUDE.md).
+- **2026-08-19 · Phase 9 = live-DOM-driven questionnaire + Detail NTL→HS6 + anti-block throttle (spec-locked, next build).**
+  Why: user wants the questionnaire driven off the LIVE DOM (navigate to the data page first, extract, re-analyse after
+  every answer to catch flow/view dependencies), Detail to prefer NTL then HS6, and a configurable pause between country
+  exports so accounts stop getting blocked (compliance: throttle, never bypass). Captured as spec rows 20–24. NOT built
+  in the handoff turn: the DOM-extraction + byProduct calibration need a live headed session (the user's), and the exact
+  throttle N + pause M are spec-lock-at-build values. Rejected: half-implementing during handoff / guessing the throttle
+  numbers or the NTL token.

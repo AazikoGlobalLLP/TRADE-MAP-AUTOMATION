@@ -16,32 +16,28 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 5 — Manifest + resume + idempotency + collision | ✅ DONE — headless 24/24 + live resume/skip proven (smoke rerun, 0-attempt manifest skip) 2026-08-17 |
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
 | 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
-| 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (18 rows) + built; offline `test:runplan` 18/18, tsc clean, existing 22/24/8/29 unchanged; adversarial review clean after 1 fix. **Live headed run is the user's** (AC pending) |
+| 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (19 rows) + built; `test:runplan` 19/19, tsc clean. **By-exporter works LIVE** (imports 4/4 proven); by-product errors (uncalibrated → Phase 9). Detail/NTL prompt added |
+| 9 — Live-DOM-driven + anti-block redesign | ⬜ TODO — **#1 PRIORITY**, spec-locked (rows 20–24 in the Phase 8 spec). Dynamic DOM questionnaire, byProduct URL wiring (real URL decoded), Detail NTL→HS6, throttle-between-countries so accounts stop blocking |
 
 ## Now
-**Phase 8 CODE COMPLETE (2026-08-18) — interactive dynamic query builder is built + offline-verified.**
-`npm run export -- --interactive` (or `-i`) now: confirms the country count PRE-launch, launches the headed
-browser, walks the user through the query against the LIVE DOM (dataset → flow → view → time → range → data
-source/type → currency → numbers display), and drives the EXISTING batch engine with the answers. Only **Time
-series** is built (others exit `DATASET_UNSUPPORTED`); Importer/Product/World-partner stay default; Monthly
-soft-warns if not logged in; flow-aware filenames (`india-export-country…`). Answers → `applyRunPlan` → a NEW
-effective config (engine untouched). An adversarial review caught + fixed a silent resume false-skip
-(interactive runs now use a **query-scoped** manifest/report path). Proven offline: `test:runplan` **18/18**,
-`tsc` clean, existing `test:batch` 22/22 · `test:manifest` 24/24 · `test:report` 8/8 · `test:isolation` 29/29
-all unchanged. Committed on `phase-1-poc`; **not yet pushed**. (Phase 7's 204-file imports export is unaffected
-— do NOT re-run it.)
+**Phase 8 built; by-exporter works LIVE, by-product is the Phase 9 job.** `npm run export:interactive` confirms
+the country count, launches headed, walks the query prompts (incl. the new Detail/NTL prompt on View by = Product),
+and drives the existing batch engine. A live run exported all 4 fixture countries SUCCESS on imports/by-exporter.
+**View by = Product errors** because that query shape (byProduct URL + Detail segment + range/heading readers) was
+never calibrated. The user provided the real byProduct URL and DOM, and asked for a redesign: drive the whole
+questionnaire off the LIVE DOM (re-analyse after each answer), Detail NTL→HS6, and a **throttle between countries**
+because **accounts are getting blocked repeatedly**. All captured as **Phase 9** (spec rows 20–24). Offline green:
+`test:runplan` 19/19, tsc clean, existing 22/24/8/29 unchanged. Committed on `phase-1-poc`; **not yet pushed**.
 
 ## Next 3
-1. **#1 — Phase 8 LIVE acceptance (the user's headed run).** Run `npm run export:interactive`, answer the
-   prompts (try flow = **Exports**), and confirm on ONE real export: (a) a `india-export-country…xlsx` lands
-   and validates; (b) the Exports `/c/<code>/` URL slot order is correct; (c) `viewWord=country` reads right.
-   These are the two flagged spec risks — one live export settles both. It PAUSES on a login page (ENTER to
-   continue), so it can't be launched from a tool shell — it's yours to run.
-2. **Make it durable: push a properly-named branch + open a PR** (carries Phases 1–8). e.g.
+1. **#1 — Phase 9: live-DOM-driven + anti-block redesign.** Build from spec rows 20–24: navigate to the byProduct
+   data page → extract DOM → drive questions dynamically (re-analyse after each answer) → Detail NTL→HS6 → wire the
+   decoded byProduct URL → add the throttle-between-countries buffer. **First spec-lock the exact throttle N + pause M
+   and capture a real `Detail=NTL` URL** (never invent it). The live-DOM calibration is the user's headed session.
+2. **Stop the account blocking NOW (interim):** don't re-run the full export to "check", and space runs out until the
+   throttle (row 23) ships. Monthly is PRO-locked — don't hammer it.
+3. **Push a properly-named branch + PR** (carries Phases 1–8): e.g.
    `git checkout -b phase-8-interactive-query-builder` then `git push -u origin phase-8-interactive-query-builder`.
-3. Optional: while calibrating, pin the `optionsReader` overlay selectors against the live DOM so the advanced
-   prompts show the REAL Data type/Currency lists (they fall back to the locked lists + log `options.fallback`
-   until then). Move production output to `D:\TradeMap\Exports` if that is the deliverable target.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress
