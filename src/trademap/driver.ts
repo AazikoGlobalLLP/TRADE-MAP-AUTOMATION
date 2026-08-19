@@ -205,6 +205,35 @@ async function clickSave(page: Page): Promise<void> {
   }
 }
 
+/** Default wait for the data table to render before Save when config omits it (Phase 9B). */
+export const DEFAULT_DATA_READY_TIMEOUT_MS = 300000; // 5 min — generous for heavy byProduct tables
+
+/**
+ * Wait for the data table to be LOADED before Save (Phase 9B, live 2026-08-19). Trade Map renders
+ * an `<app-loader>` spinner while the dataset fetches, and clicking Save before the rows exist
+ * produces NO download — confirmed the hard way: an NTL byProduct Save fired ~30s after navigate
+ * (table still spinning) and timed out with no download event.
+ *
+ * byPartner data is already present here (the pre-Save gate read it off the DOM via readShownRange),
+ * so this returns true almost immediately; a heavy byProduct table blocks until its rows render.
+ * Ready = NO visible `<app-loader>` AND at least one data row/header present. Returns true if ready,
+ * false on timeout (the caller may still attempt Save — no worse than before). waitForFunction runs
+ * in the browser, so this MUST run compiled (CLAUDE.md `__name` gotcha) — export/calibrate already do.
+ */
+export async function waitForDataReady(page: Page, timeoutMs: number): Promise<boolean> {
+  return page
+    .waitForFunction(
+      () => {
+        const loaderVisible = Array.from(document.querySelectorAll('app-loader')).some((l) => l.getClientRects().length > 0);
+        const rows = document.querySelectorAll('.mat-mdc-row, mat-row, tbody tr, .mat-mdc-header-cell, [role="row"]').length;
+        return !loaderVisible && rows > 0;
+      },
+      { timeout: timeoutMs },
+    )
+    .then(() => true)
+    .catch(() => false);
+}
+
 /**
  * Read the EFFECTIVE served range from the data table's month columns. This is the
  * trusted source for CLIPPED detection (the URL can lie for a reduced-availability

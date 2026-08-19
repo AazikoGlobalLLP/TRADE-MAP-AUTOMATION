@@ -35,6 +35,10 @@ export interface DownloadConfig {
   collisionMode?: CollisionMode; // Phase 5 (§37); when unset, derived from `overwrite`
   timeoutMs: number;
   downloadAttempts: number;
+  // Phase 9B: how long to wait for the data table to render BEFORE clicking Save. byProduct
+  // (esp. NTL) renders slowly and Save before data exists yields no download; byPartner is
+  // instant. Optional; when unset, DEFAULT_DATA_READY_TIMEOUT_MS (driver.ts) applies.
+  dataReadyTimeoutMs?: number;
 }
 
 export interface AuthConfig {
@@ -215,6 +219,10 @@ export function validateConfig(raw: unknown): AppConfig {
     timeoutMs: reqPositiveInt(rawDownload.timeoutMs, 'download.timeoutMs'),
     downloadAttempts: reqPositiveInt(rawDownload.downloadAttempts, 'download.downloadAttempts'),
   };
+  // dataReadyTimeoutMs — optional (Phase 9B); positive int if present, else the driver default.
+  if (rawDownload.dataReadyTimeoutMs !== undefined) {
+    download.dataReadyTimeoutMs = reqPositiveInt(rawDownload.dataReadyTimeoutMs, 'download.dataReadyTimeoutMs');
+  }
   // collisionMode — optional (Phase 5, §37); when unset, save-time behaviour is derived from
   // `overwrite` (true→overwrite, false→skip), so a pre-Phase-5 config is unchanged.
   if (rawDownload.collisionMode !== undefined) {

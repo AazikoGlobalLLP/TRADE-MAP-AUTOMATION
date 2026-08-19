@@ -1,6 +1,12 @@
 import { Page } from 'playwright';
 import { isLoginPage, promptManualLogin } from '../auth/session';
-import { buildCanonicalUrl, verifyCountryHeading, triggerSaveAndDownload } from '../trademap/driver';
+import {
+  buildCanonicalUrl,
+  verifyCountryHeading,
+  triggerSaveAndDownload,
+  waitForDataReady,
+  DEFAULT_DATA_READY_TIMEOUT_MS,
+} from '../trademap/driver';
 import { ensureAllFilters } from '../trademap/filters';
 import { verifyQuery } from '../trademap/verifyQuery';
 import { RequestedRange, computeEffectiveRange } from '../trademap/rangeEngine';
@@ -102,6 +108,17 @@ export async function runCountry(
   // Hard pre-Save gate (PRD §42, convention #5): heading + every filter + the requested
   // range must all be correct, or this throws QUERY_INVALID and Save is never reached.
   await verifyQuery(page, country, config.filters, { start: requestedStart, end: requestedEnd }, log);
+
+  // Data must be LOADED before Save (Phase 9B). byPartner passed the gate by reading the DOM table,
+  // so its data is already present (fast no-op); a byProduct query passes the gate from the URL, so
+  // the heavy product table (esp. NTL) may still be rendering — and Save before the rows exist yields
+  // NO download (confirmed live 2026-08-19). Tunable via download.dataReadyTimeoutMs. On timeout we
+  // still attempt Save (no worse than before) but record it so a no-download is explained.
+  const dataReady = await waitForDataReady(page, config.download.dataReadyTimeoutMs ?? DEFAULT_DATA_READY_TIMEOUT_MS);
+  log(dataReady ? 'info' : 'warn', dataReady ? 'data.ready' : 'data.not_ready', {
+    country,
+    ...(dataReady ? {} : { note: 'data table did not render before Save; attempting Save anyway' }),
+  });
 
   // Trigger Save + capture the download FIRST (PRD §18, §26–27). In the new Trade Map beta
   // the rendered/URL columns ALWAYS span the full requested range (months a country lacks
