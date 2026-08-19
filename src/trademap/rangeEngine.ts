@@ -125,3 +125,27 @@ export function chooseReadout(
 ): RangeReadout | null {
   return fromDom ?? fromUrl;
 }
+
+/**
+ * Choose which served-range readout the pre-Save GATE should trust, BY VIEW. The two views
+ * write the range differently (both confirmed live) so the trustworthy source differs:
+ *
+ *  • byPartner (View by = Exporter): the URL LIES — it keeps the *requested* range and pads
+ *    unavailable months with 0 (CLAUDE.md gotcha, DECISIONS 2026-08-17). Only the DOM table
+ *    tells the truth, so use the DOM readout and nothing else.
+ *  • byProduct (View by = Product): the URL is CLAMPED to the real availability window
+ *    (confirmed live 2026-08-19: requested 200001-202606 → served 200704-202605 in the URL,
+ *    matching the Time-range control), AND the product table (esp. NTL, ~thousands of rows ×
+ *    all months) is frequently too heavy to render — so the URL is the trustworthy source and
+ *    the DOM is only a fallback.
+ *
+ * PURE, so the per-view policy is proven offline (test:isolation). Returns null only when the
+ * chosen source(s) are unavailable, which the gate turns into a QUERY_INVALID (never a Save).
+ */
+export function chooseGateRange(
+  viewBy: string,
+  fromDom: RangeReadout | null,
+  fromUrl: RangeReadout | null,
+): RangeReadout | null {
+  return (viewBy || '').trim().toLowerCase() === 'product' ? (fromUrl ?? fromDom) : fromDom;
+}

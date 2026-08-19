@@ -8,7 +8,7 @@ import {
   readCurrentFilters,
 } from './filters';
 import { readHeadingCandidates, readShownRange } from './driver';
-import { RangeReadout, isWithinRequested } from './rangeEngine';
+import { RangeReadout, isWithinRequested, parseRange, chooseGateRange } from './rangeEngine';
 
 // ---------------------------------------------------------------------------
 // Query Validation Gate (PRD §42, convention #5): NEVER click Save unless the
@@ -95,7 +95,10 @@ export async function verifyQuery(
   const actual: ActualQuery = {
     headingText: await readHeadingCandidates(page),
     filters: await readCurrentFilters(page, filters),
-    range: await readShownRange(page),
+    // By-view range source (chooseGateRange): byPartner trusts the DOM table (its URL lies);
+    // byProduct trusts the URL (it clamps to real availability and the heavy product table often
+    // does not render). Confirmed live 2026-08-19 — see chooseGateRange.
+    range: chooseGateRange(filters.viewBy, await readShownRange(page), parseRange(page.url())),
   };
   assertQueryValid({ importer, filters: expectedFilters(filters), range: requestedRange }, actual);
   log('info', 'query.verified', { importer, requestedRange: `${requestedRange.start}-${requestedRange.end}` });

@@ -14,10 +14,10 @@ import { Page } from 'playwright';
 // locked fallback list and logs `options.fallback`, so a miscalibrated selector
 // degrades to the static list instead of bricking the run.
 //
-// The overlay selectors are UNCALIBRATED — like readCurrentFilters()/the resolver
-// UI they must be pinned against the live DOM in a headed session (Phase 8B). We
-// read via locator APIs only (no `page.evaluate`) so this behaves identically
-// under `tsx` and compiled `node` (CLAUDE.md `__name` gotcha).
+// The overlay selectors are CALIBRATED (2026-08-19, live byProduct DOM): the controls
+// are custom `<app-single-picker>` whose overlay renders `.options-modal .option span.text`
+// rows — see readLiveOptions. We read via locator APIs only (no `page.evaluate`) so this
+// behaves identically under `tsx` and compiled `node` (CLAUDE.md `__name` gotcha).
 // ---------------------------------------------------------------------------
 
 /** Matches the structured logger created in index.ts (structural typing). */
@@ -39,23 +39,71 @@ export interface OptionReadResult {
  * Read a control's options from the live DOM, or fall back. Best-effort and
  * side-effect-light: it opens the control's overlay, reads the visible option
  * texts, then closes the overlay again (Escape) so the page is left as found.
+ *
+ * CALIBRATED 2026-08-19 against a live byProduct DOM. The advanced controls (Data
+ * source / Data type / Currency / Detail / Numbers display) are custom
+ * `<app-single-picker>` components — NOT mat-select: the visible field label lives
+ * in an inner `.label`, and clicking `.form-container` (a `cdkoverlayorigin`) opens
+ * a CDK overlay `.options-modal` whose rows are `.option > .text-container > span.text`
+ * (with `.selected`/`.disabled` state). We read that clean value span, not the row's
+ * whole text (which also carries `.sub-text` and Pro badges).
  */
 export async function readLiveOptions(page: Page, control: OptionControl, log: Logger): Promise<OptionReadResult> {
   try {
-    // 1. Find + open the control trigger by its visible label. UNCALIBRATED selector.
-    const trigger = page.locator('button, [role="button"], mat-select, .mat-mdc-select-trigger', {
-      hasText: control.triggerLabel,
-    }).first();
+    // 1. Find + open the control trigger by its visible label. The real Trade Map control is a
+    //    custom app-single-picker whose `.label` == the field name; click its cdkoverlayorigin
+    //    trigger. Fall back to a Material mat-select layout, then a broad text match.
+    const trigger = page
+      .locator('app-single-picker, app-country-picker, app-inline-selector')
+      .filter({ has: page.locator('.label', { hasText: control.triggerLabel }) })
+      .locator('.form-container, [cdkoverlayorigin]')
+      .first();
+    let opened = trigger;
     if (!(await trigger.isVisible({ timeout: 2000 }).catch(() => false))) {
+      opened = page
+        .locator('mat-form-field, .mat-mdc-form-field', { hasText: control.triggerLabel })
+        .locator('mat-select, .mat-mdc-select-trigger, [role="combobox"], button')
+        .first();
+      if (!(await opened.isVisible({ timeout: 1500 }).catch(() => false))) {
+        opened = page
+          .locator('button, [role="button"], mat-select, .mat-mdc-select-trigger, [role="combobox"]', {
+            hasText: control.triggerLabel,
+          })
+          .first();
+      }
+    }
+    if (!(await opened.isVisible({ timeout: 1500 }).catch(() => false))) {
       throw new Error(`trigger "${control.triggerLabel}" not visible`);
     }
-    await trigger.click();
+    await opened.click();
 
-    // 2. Read the option texts from the CDK overlay (custom pickers render here,
-    //    not as <mat-option>). Match the option rows generically. UNCALIBRATED.
-    const overlay = page.locator('.cdk-overlay-container');
-    const optionNodes = overlay.locator('mat-option, [role="option"], .mat-mdc-option, li');
-    const rawTexts = await optionNodes.allInnerTexts().catch(() => [] as string[]);
+    // 2. Wait for the NEWEST overlay pane to render content (real state, not a blind sleep), then
+    //    read the option VALUE spans. Read from `.last()` pane so a still-closing prior pane can't
+    //    bleed in. Custom picker rows are `.option span.text`; mat-select/menu fall back to roles.
+    const pane = page.locator('.cdk-overlay-pane').last();
+    await pane.waitFor({ state: 'visible', timeout: 3000 }).catch(() => undefined);
+    await page
+      .waitForFunction(
+        () => {
+          const panes = document.querySelectorAll('.cdk-overlay-pane');
+          const last = panes[panes.length - 1];
+          return !!last && (last.textContent || '').trim().length > 0;
+        },
+        { timeout: 3000 },
+      )
+      .catch(() => undefined);
+
+    let rawTexts = await pane
+      .locator('.options-modal .option .text-container span.text, .option span.text')
+      .allInnerTexts()
+      .catch(() => [] as string[]);
+    if (rawTexts.length === 0) {
+      // mat-select / mat-menu style controls
+      rawTexts = await pane
+        .locator('mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"]')
+        .allInnerTexts()
+        .catch(() => [] as string[]);
+    }
 
     // 3. Restore the page — dismiss the overlay whether or not we found anything.
     await page.keyboard.press('Escape').catch(() => undefined);

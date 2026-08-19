@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import {
   computeEffectiveRange,
   chooseReadout,
+  chooseGateRange,
   rangeFromColumnClasses,
   RequestedRange,
   RangeReadout,
@@ -294,6 +295,32 @@ check('buildCanonicalUrl(byProduct, uncaptured Detail) still hard-errors — nev
 check('buildCanonicalUrl(byProduct) with no Detail set → DETAIL_REQUIRED', () => {
   const noDetail: FiltersConfig = { ...PRODUCT_FILTERS, detail: undefined };
   assert.throws(() => buildCanonicalUrl('https://www.trademap.org', '842', noDetail, '200001', '202606'), /DETAIL_REQUIRED/);
+});
+
+// chooseGateRange — the by-view range source for the pre-Save gate (Phase 9B, live 2026-08-19).
+process.stdout.write('\nchooseGateRange — by-view range source for the pre-Save gate (Phase 9B):\n');
+
+const DOM_R: RangeReadout = { start: '200401', end: '202512' }; // the truthful DOM table window
+const URL_R: RangeReadout = { start: '200704', end: '202605' }; // the byProduct URL (clamped) window
+
+check('byPartner (exporter) trusts the DOM readout, NOT the lying URL', () => {
+  assert.deepEqual(chooseGateRange('exporter', DOM_R, URL_R), DOM_R);
+});
+
+check('byPartner with an unreadable DOM stays null (→ QUERY_INVALID) — never falls back to the lying URL', () => {
+  assert.equal(chooseGateRange('exporter', null, URL_R), null);
+});
+
+check('byProduct (product) trusts the CLAMPED URL even when the heavy table did not render (DOM null)', () => {
+  assert.deepEqual(chooseGateRange('product', null, URL_R), URL_R);
+});
+
+check('byProduct prefers the URL over the DOM (both truthful for byProduct)', () => {
+  assert.deepEqual(chooseGateRange('product', DOM_R, URL_R), URL_R);
+});
+
+check('byProduct with neither source stays null (→ QUERY_INVALID)', () => {
+  assert.equal(chooseGateRange('Product', null, null), null);
 });
 
 process.stdout.write(`\nIsolation harness: ${passed} passed, ${failures.length} failed\n`);
