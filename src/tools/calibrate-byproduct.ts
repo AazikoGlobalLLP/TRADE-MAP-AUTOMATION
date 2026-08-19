@@ -61,15 +61,15 @@ function getArg(name: string): string | undefined {
   return idx >= 0 && idx + 1 < process.argv.length ? process.argv[idx + 1] : undefined;
 }
 
-/** Wait (on real state, never a blind sleep) for every CDK overlay's option rows to be gone. */
+/**
+ * Wait (on real state, never a blind sleep) for every CDK overlay pane to be empty.
+ * Text-content-based so it works for mat-select options, mat-menu items AND the custom
+ * app-single-picker overlays (whose rows aren't mat-option), unlike a role-specific check.
+ */
 async function waitForOverlayClosed(page: Page): Promise<void> {
   await page
     .waitForFunction(
-      () =>
-        document.querySelectorAll(
-          '.cdk-overlay-pane mat-option, .cdk-overlay-pane [role="option"], .cdk-overlay-pane .mat-mdc-option, ' +
-            '.cdk-overlay-pane .mat-mdc-menu-item, .cdk-overlay-pane [role="menuitem"]',
-        ).length === 0,
+      () => Array.from(document.querySelectorAll('.cdk-overlay-pane')).every((p) => (p.textContent || '').trim().length === 0),
       { timeout: 2000 },
     )
     .catch(() => undefined);
@@ -86,9 +86,19 @@ async function waitForOverlayClosed(page: Page): Promise<void> {
  * than throwing, and always tries to dismiss whatever it opened.
  */
 async function captureOverlay(page: Page, control: { key: string; label: string }, log: Logger): Promise<OverlayCapture> {
-  // Strategy 0: the mat-form-field whose label text is `control.label` → its select/trigger inside.
-  // Strategy 1: a broad control element that itself contains the label text (some layouts inline it).
+  // Strategy 0: the custom app-single-picker/app-country-picker/app-inline-selector whose inner
+  //   `.label` div == control.label → click its `.form-container` (the cdkoverlayorigin trigger).
+  //   This is the REAL structure Trade Map uses for Data source/type/Currency/Numbers display/Detail
+  //   (captured 2026-08-19 from a live byProduct DOM) — they are NOT mat-select.
+  // Strategy 1: a Material mat-form-field (in case a control is a real mat-select).
+  // Strategy 2: a broad control element that itself contains the label text.
   const strategies: Array<() => import('playwright').Locator> = [
+    () =>
+      page
+        .locator('app-single-picker, app-country-picker, app-inline-selector')
+        .filter({ has: page.locator('.label', { hasText: control.label }) })
+        .locator('.form-container, [cdkoverlayorigin], .value')
+        .first(),
     () =>
       page
         .locator('mat-form-field, .mat-mdc-form-field, .mat-form-field', { hasText: control.label })
@@ -108,18 +118,25 @@ async function captureOverlay(page: Page, control: { key: string; label: string 
       if (!(await trigger.isVisible({ timeout: 1500 }).catch(() => false))) continue;
       await trigger.click().catch(() => undefined);
 
-      // Wait for the NEWEST pane's options to actually render before reading (real state).
-      // Covers both mat-select options AND mat-menu items (at least one Trade Map control — Save —
-      // is a mat-menu, per CLAUDE.md), so the gate fires for menu-style controls too.
+      // Wait for the NEWEST pane to render content before reading (real state). Text-based so it
+      // fires for mat-select options, mat-menu items AND the custom app-single-picker rows alike.
       const pane = page.locator('.cdk-overlay-pane').last();
-      await pane
-        .locator('mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"]')
-        .first()
-        .waitFor({ state: 'visible', timeout: 3000 })
+      await pane.waitFor({ state: 'visible', timeout: 3000 }).catch(() => undefined);
+      await page
+        .waitForFunction(
+          () => {
+            const panes = document.querySelectorAll('.cdk-overlay-pane');
+            const last = panes[panes.length - 1];
+            return !!last && (last.textContent || '').trim().length > 0;
+          },
+          { timeout: 3000 },
+        )
         .catch(() => undefined);
 
+      // Broad row selector (custom picker rows are not mat-option); the pane innerHTML below is the
+      // authoritative Q3 artifact I calibrate from regardless of the row class.
       const optionNodes = pane.locator(
-        'mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"], li, button',
+        'mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"], .option, [class*="option"], li, button',
       );
       const rawTexts = await optionNodes.allInnerTexts().catch(() => [] as string[]);
       const overlayHtml = await pane.innerHTML().catch(() => null);
@@ -222,15 +239,26 @@ async function main(): Promise<void> {
       );
     }
 
-    // Wait on REAL state (never a blind sleep, convention #1): let the network settle, then
-    // wait for SOME table indicator to appear. Both are best-effort — if neither fires we still
-    // capture the raw DOM so a wrong assumption is visible in the dump rather than a silent hang.
+    // Wait on REAL state (never a blind sleep, convention #1) for the byProduct table to finish
+    // loading. Trade Map renders an <app-loader> spinner while the (heavy, for NTL monthly) dataset
+    // fetches; it is REMOVED when the table renders. We wait for "no visible app-loader AND some
+    // table structure present" — class-agnostic about the exact header-cell class (that is what Q2
+    // calibrates) and generous (180s) because NTL-monthly-full-history is a large fetch. Best-effort:
+    // on timeout we still capture the raw DOM so the state is visible in the dump, never a silent hang.
     await page.waitForLoadState('networkidle', { timeout: 60000 }).catch(() => undefined);
     await page
-      .locator('.mat-mdc-header-cell, mat-table, table')
-      .first()
-      .waitFor({ state: 'visible', timeout: 30000 })
-      .catch(() => log('warn', 'table.not_visible', { note: 'no obvious table selector visible within 30s' }));
+      .waitForFunction(
+        () => {
+          const loaderVisible = Array.from(document.querySelectorAll('app-loader')).some((l) => l.getClientRects().length > 0);
+          const tableEls = document.querySelectorAll(
+            '.mat-mdc-header-cell, [role="columnheader"], thead th, .mat-mdc-row, mat-row, tbody tr',
+          ).length;
+          return !loaderVisible && tableEls > 0;
+        },
+        { timeout: 180000 },
+      )
+      .catch(() => log('warn', 'table.wait_timeout', { note: 'app-loader still visible or no table structure after 180s' }));
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
 
     // --- Q1 + Q2: read range/heading with the REAL functions BEFORE touching any menu ---
     const finalUrl = page.url();
@@ -355,14 +383,9 @@ async function main(): Promise<void> {
     fs.writeFileSync(jsonPath, JSON.stringify(baseResult, null, 2), 'utf8');
     log('info', 'persist.primary', { jsonPath });
 
-    // --- Q3: advanced-option overlays. Try to expand an Advanced panel first (best-effort). ---
-    const advanced = page.locator('button, [role="button"], a', { hasText: /advanced/i }).first();
-    if (await advanced.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await advanced.click().catch(() => undefined);
-      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
-      log('info', 'advanced.clicked', {});
-    }
-
+    // --- Q3: advanced-option overlays. The Advanced-options panel is EXPANDED BY DEFAULT on the
+    // byProduct page (confirmed live 2026-08-19), so we do NOT click any "Advanced" toggle — doing so
+    // would COLLAPSE it and hide the very controls we want. captureOverlay finds each by its label.
     const controls = [
       { key: 'dataSource', label: 'Data source' },
       { key: 'dataType', label: 'Data type' },
