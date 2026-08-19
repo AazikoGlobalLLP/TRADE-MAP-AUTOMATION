@@ -67,7 +67,8 @@ async function waitForOverlayClosed(page: Page): Promise<void> {
     .waitForFunction(
       () =>
         document.querySelectorAll(
-          '.cdk-overlay-pane mat-option, .cdk-overlay-pane [role="option"], .cdk-overlay-pane .mat-mdc-option',
+          '.cdk-overlay-pane mat-option, .cdk-overlay-pane [role="option"], .cdk-overlay-pane .mat-mdc-option, ' +
+            '.cdk-overlay-pane .mat-mdc-menu-item, .cdk-overlay-pane [role="menuitem"]',
         ).length === 0,
       { timeout: 2000 },
     )
@@ -108,14 +109,18 @@ async function captureOverlay(page: Page, control: { key: string; label: string 
       await trigger.click().catch(() => undefined);
 
       // Wait for the NEWEST pane's options to actually render before reading (real state).
+      // Covers both mat-select options AND mat-menu items (at least one Trade Map control — Save —
+      // is a mat-menu, per CLAUDE.md), so the gate fires for menu-style controls too.
       const pane = page.locator('.cdk-overlay-pane').last();
       await pane
-        .locator('mat-option, [role="option"], .mat-mdc-option')
+        .locator('mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"]')
         .first()
         .waitFor({ state: 'visible', timeout: 3000 })
         .catch(() => undefined);
 
-      const optionNodes = pane.locator('mat-option, [role="option"], .mat-mdc-option, li, button');
+      const optionNodes = pane.locator(
+        'mat-option, [role="option"], .mat-mdc-option, .mat-mdc-menu-item, [role="menuitem"], li, button',
+      );
       const rawTexts = await optionNodes.allInnerTexts().catch(() => [] as string[]);
       const overlayHtml = await pane.innerHTML().catch(() => null);
 
@@ -241,8 +246,18 @@ async function main(): Promise<void> {
     // Persist the deep-read artifacts NOW (menus still closed = clean control-panel structure),
     // so any later throw in the dump/overlay phase can never erase them.
     const pageHtml = await page.content().catch(() => '');
-    if (pageHtml) fs.writeFileSync(htmlPath, pageHtml, 'utf8');
-    await page.screenshot({ path: pngPath, fullPage: true }).catch(() => undefined);
+    let htmlSaved = false;
+    if (pageHtml) {
+      fs.writeFileSync(htmlPath, pageHtml, 'utf8');
+      htmlSaved = true;
+    }
+    let pngSaved = false;
+    await page
+      .screenshot({ path: pngPath, fullPage: true })
+      .then(() => {
+        pngSaved = true;
+      })
+      .catch(() => undefined);
 
     // Raw structural dump (compiled → page.evaluate is safe). GUARDED like every other read:
     // if it throws (e.g. a client-side URL rewrite — exactly Q1's hypothesis — destroys the
@@ -387,7 +402,12 @@ async function main(): Promise<void> {
         `  Q3 ${o.label.padEnd(12)}: ${o.triggerFound ? o.options.length + ' options ' + JSON.stringify(o.options.slice(0, 8)) : 'trigger NOT found (calibrate from dump.controlCandidates)'}\n`,
       );
     }
-    process.stdout.write(`  Saved:\n    ${jsonPath}\n    ${htmlPath}\n    ${pngPath}\n`);
+    const saved = [
+      jsonPath, // always written (primary, then rewritten with overlays)
+      htmlSaved ? htmlPath : `${htmlPath}  (NOT written — page.content() was empty)`,
+      pngSaved ? pngPath : `${pngPath}  (NOT written — screenshot failed)`,
+    ];
+    process.stdout.write(`  Saved:\n    ${saved.join('\n    ')}\n`);
     process.stdout.write('---------------------------------------------\n');
     process.stdout.write('Ab mujhe batayein: "byproduct done". Main JSON padh kar selectors calibrate karunga.\n');
   } finally {
