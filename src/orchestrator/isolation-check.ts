@@ -11,6 +11,7 @@ import { assertQueryValid, ExpectedQuery, ActualQuery } from '../trademap/verify
 import { expectedFilters, filterMismatches, parseFiltersFromUrl } from '../trademap/filters';
 import { buildCanonicalUrl, resolveDetailUrlToken } from '../trademap/driver';
 import { dataMonthsRange } from '../files/effective-range';
+import { deriveFlowTokens } from '../files/filename';
 import { FiltersConfig } from '../config/schema';
 
 // ---------------------------------------------------------------------------
@@ -321,6 +322,22 @@ check('byProduct prefers the URL over the DOM (both truthful for byProduct)', ()
 
 check('byProduct with neither source stays null (→ QUERY_INVALID)', () => {
   assert.equal(chooseGateRange('Product', null, null), null);
+});
+
+// deriveFlowTokens.detailWord — the filename must carry the product-detail level so an HS6 file and
+// an NTL file for the same country/range never collide (Phase 9B, user request 2026-08-19).
+process.stdout.write('\nderiveFlowTokens.detailWord — detail level in the filename (Phase 9B):\n');
+
+check('byProduct NTL → detailWord "NTL"', () => {
+  assert.equal(deriveFlowTokens({ tradeFlow: 'imports', viewBy: 'product', frequency: 'monthly', source: 'direct', detail: 'NTL' }).detailWord, 'NTL');
+});
+
+check('byProduct HS6 → detailWord "HS6" (upper-cased)', () => {
+  assert.equal(deriveFlowTokens({ tradeFlow: 'imports', viewBy: 'product', frequency: 'monthly', source: 'direct', detail: 'hs6' }).detailWord, 'HS6');
+});
+
+check('byPartner (no detail) → detailWord "AllProducts" (so an HS6 vs NTL name never collides, but byPartner is unchanged)', () => {
+  assert.equal(deriveFlowTokens({ tradeFlow: 'imports', viewBy: 'exporter', frequency: 'monthly', source: 'mirror' }).detailWord, 'AllProducts');
 });
 
 process.stdout.write(`\nIsolation harness: ${passed} passed, ${failures.length} failed\n`);

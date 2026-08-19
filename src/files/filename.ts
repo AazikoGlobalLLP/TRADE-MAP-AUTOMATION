@@ -23,6 +23,7 @@ export interface FlowTokenInput {
   viewBy: string; // 'exporter' | 'product'
   frequency: string; // 'monthly' | 'quarterly' | 'yearly'
   source: string; // 'mirror' | 'direct'
+  detail?: string; // Phase 9: 'NTL' | 'HS6' | 'HS4' | 'HS2' — only set for viewBy=product
 }
 
 // Word maps for the Phase 8 flow-aware filename (spec row 16). Singular flow word
@@ -45,6 +46,10 @@ export function deriveFlowTokens(f: FlowTokenInput): Record<string, string> {
     viewWord: VIEW_WORD[lc(f.viewBy)] ?? lc(f.viewBy),
     timeWord: lc(f.frequency),
     sourceWord: SOURCE_WORD[lc(f.source)] ?? lc(f.source),
+    // Phase 9: the product-detail level for the filename (spec: name must carry the granularity so
+    // an HS6 file and an NTL file for the same country/range never collide). byProduct → 'NTL'/'HS6'/…
+    // (kept UPPER-cased, they are acronyms); byPartner has no detail → 'AllProducts'.
+    detailWord: f.detail && f.detail.trim() ? f.detail.trim().toUpperCase() : 'AllProducts',
   };
 }
 

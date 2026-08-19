@@ -213,6 +213,7 @@ void (async () => {
       viewWord: 'country',
       timeWord: 'monthly',
       sourceWord: 'mirror',
+      detailWord: 'AllProducts', // Phase 9B: no detail (byPartner) → 'AllProducts'
     });
     assert.equal(deriveFlowTokens({ tradeFlow: 'reexports', viewBy: 'x', frequency: 'y', source: 'z' }).flowWord, 'reexports');
   });

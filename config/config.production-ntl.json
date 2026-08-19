@@ -1,4 +1,5 @@
 {
+  "_note": "PRODUCTION config for the full 204-country byProduct NTL export. Run: npm run batch -- --config config/config.production-ntl.json  (see docs/FRIEND_SETUP_GUIDE.md). byProduct + Detail=NTL + source=direct (Mirror is disabled for byProduct). Full list = countries-full.xlsx (204). Randomized anti-block throttle (break after a random 1-5 countries for a random 2-7 min). NTL tables are heavy: dataReadyTimeoutMs=15min, download timeoutMs=10min. Own resume manifest so it never clashes with a byPartner run; re-running the SAME command resumes where it left off.",
   "tradeMapBaseUrl": "https://www.trademap.org",
   "outputDirectory": "./output",
   "browserProfileDir": "./browser-profile",
@@ -10,12 +11,13 @@
     "exporter": "world",
     "exporterCode": "000",
     "product": "ALL",
-    "viewBy": "exporter",
+    "viewBy": "product",
     "frequency": "monthly",
-    "source": "mirror",
+    "source": "direct",
     "dataType": "values",
     "currency": "USD",
-    "view": "table"
+    "view": "table",
+    "detail": "NTL"
   },
 
   "auth": {
@@ -32,12 +34,13 @@
     "format": "xlsx",
     "overwrite": false,
     "collisionMode": "skip",
-    "timeoutMs": 300000,
-    "downloadAttempts": 2
+    "timeoutMs": 600000,
+    "downloadAttempts": 2,
+    "dataReadyTimeoutMs": 900000
   },
 
   "batch": {
-    "inputFile": "./input/countries.xlsx",
+    "inputFile": "./input/countries-full.xlsx",
     "maxAttemptsPerCountry": 3,
     "retryDelayMs": 2000,
     "continueOnFailure": true,
@@ -48,8 +51,8 @@
     "throttlePauseMaxMs": 420000
   },
 
-  "manifestFile": "./manifests/latest-run.json",
-  "runReportFile": "./manifests/run-report.xlsx",
+  "manifestFile": "./manifests/latest-run-ntl.json",
+  "runReportFile": "./manifests/run-report-ntl.xlsx",
 
   "filenameTemplate": "{countrySlug}__{flow}-from-World__{detailWord}__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}"
 }
