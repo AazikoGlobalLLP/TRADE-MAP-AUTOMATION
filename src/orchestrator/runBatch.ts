@@ -74,9 +74,17 @@ export interface BatchDeps {
   writeManifest?: typeof realWriteManifest;
   /** ISO timestamp source; injectable so the harness is deterministic. */
   now?: () => string;
+  /** [0,1) RNG for the randomized anti-block throttle; injectable so the harness is deterministic. */
+  random?: () => number;
 }
 
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Inclusive random integer in [lo, hi] using the injected [0,1) RNG. Returns lo when hi ≤ lo. */
+function drawInt(lo: number, hi: number, rnd: () => number): number {
+  if (hi <= lo) return lo;
+  return lo + Math.floor(rnd() * (hi - lo + 1));
+}
 
 /** Real idempotency re-validation: `validateXlsx` throws on any problem → treat as "not done". */
 const realValidateFile = async (targetPath: string): Promise<boolean> => {
@@ -96,6 +104,7 @@ export const defaultBatchDeps: BatchDeps = {
   loadManifest: realLoadManifest,
   writeManifest: realWriteManifest,
   now: () => new Date().toISOString(),
+  random: () => Math.random(),
 };
 
 /** Build a manifest entry from a completed outcome (Phase 5). */
@@ -138,15 +147,21 @@ export async function runBatch(
   deps: BatchDeps = defaultBatchDeps,
   force = false,
 ): Promise<BatchSummary> {
-  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir, throttleEvery, throttlePauseMs } =
-    config.batch;
+  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir } = config.batch;
+  const { throttleEveryMin, throttleEveryMax, throttlePauseMinMs, throttlePauseMaxMs } = config.batch;
   const outcomes: CountryOutcome[] = [];
   let aborted = false;
   let abortReason: string | undefined;
   let sessionExpired = false;
-  // Anti-block throttle bookkeeping (Phase 9, spec row 23): count only countries that actually
-  // hit the browser, so a resume run (mostly early-skips) inserts no pointless pauses.
-  let worked = 0;
+  // Randomized anti-block throttle bookkeeping (Phase 9, spec rows 23,28). `ranSinceBreak` counts
+  // only countries that actually hit the browser (a resume-skip `continue`s before it). `breakAfter`
+  // is the current burst size — re-drawn after every break so the cadence keeps changing. The RNG is
+  // injected so the offline harness is fully deterministic.
+  const rnd = deps.random ?? (() => Math.random());
+  const throttleOn = throttleEveryMax > 0;
+  const drawBurst = (): number => drawInt(Math.max(1, throttleEveryMin), throttleEveryMax, rnd);
+  let ranSinceBreak = 0;
+  let breakAfter = throttleOn ? drawBurst() : 0;
 
   const requestedRange = `${global.requestedStart}-${global.requestedEnd}`;
   // `--force` overrides the collision mode to `overwrite` for the whole run (spec-lock row 4).
@@ -183,7 +198,9 @@ export async function runBatch(
     collisionMode,
     force,
     manifest: manifestEnabled ? manifestPath : 'disabled',
-    throttle: throttleEvery > 0 ? `every ${throttleEvery} for ${throttlePauseMs}ms` : 'disabled',
+    throttle: throttleOn
+      ? `random ${throttleEveryMin}-${throttleEveryMax} countries, ${throttlePauseMinMs}-${throttlePauseMaxMs}ms pause`
+      : 'disabled',
   });
 
   for (let idx = 0; idx < countries.length; idx++) {
@@ -206,6 +223,20 @@ export async function runBatch(
         targetPath: prev?.targetPath,
       });
       continue; // manifest entry left as SUCCESS (spec-lock row 7)
+    }
+
+    // Randomized anti-block throttle (Phase 9, spec rows 23,28): BEFORE running this country, if the
+    // current burst is complete, take a RANDOM break of a RANDOM duration, then draw a fresh random
+    // burst size. Taking the pause BEFORE the run (not after) means trailing resume-skips never
+    // trigger a pause and no pause ever trails the last country that runs. This is a politeness
+    // buffer that spreads load; it NEVER bypasses a site limit (CLAUDE.md compliance boundary).
+    if (throttleOn && ranSinceBreak >= breakAfter) {
+      const pauseMs = drawInt(throttlePauseMinMs, throttlePauseMaxMs, rnd);
+      const nextBurst = drawBurst();
+      log('info', 'batch.throttle', { beforeCountry: country, ranInBurst: ranSinceBreak, pauseMs, nextBurst });
+      await deps.sleep(pauseMs);
+      ranSinceBreak = 0;
+      breakAfter = nextBurst;
     }
 
     try {
@@ -295,15 +326,10 @@ export async function runBatch(
       break;
     }
 
-    // Anti-block throttle (Phase 9, spec row 23): pause between country exports so a long run
-    // spreads load and does not get the account blocked. Only countries that reached runCountry
-    // count (an early resume-skip `continue`s above; abort/stop `break`s out before here). Never
-    // pause after the final country. A politeness buffer, NEVER a limit-bypass (CLAUDE.md).
-    worked += 1;
-    if (throttleEvery > 0 && worked % throttleEvery === 0 && idx < countries.length - 1) {
-      log('info', 'batch.throttle', { afterCountry: country, worked, pauseMs: throttlePauseMs });
-      await deps.sleep(throttlePauseMs);
-    }
+    // This country reached runCountry (a resume-skip `continue`s above; an abort/stop `break`s out
+    // before here), so count it toward the current burst. The pause itself is taken at the TOP of
+    // the NEXT running iteration, so no pause ever trails the run.
+    ranSinceBreak += 1;
   }
 
   const success = outcomes.filter((o) => o.status === 'SUCCESS').length;

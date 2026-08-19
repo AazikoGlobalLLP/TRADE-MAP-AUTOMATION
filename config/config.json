@@ -42,8 +42,10 @@
     "retryDelayMs": 2000,
     "continueOnFailure": true,
     "evidenceDir": "./screenshots/failures",
-    "throttleEvery": 5,
-    "throttlePauseMs": 120000
+    "throttleEveryMin": 1,
+    "throttleEveryMax": 5,
+    "throttlePauseMinMs": 120000,
+    "throttlePauseMaxMs": 420000
   },
 
   "manifestFile": "./manifests/latest-run.json",

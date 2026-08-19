@@ -99,6 +99,12 @@ function makeDeps(runCountry: BatchDeps['runCountry']): {
   return { deps, captureCalls };
 }
 
+/** A deterministic [0,1) RNG for the throttle tests: returns `values` in order, then 0 forever. */
+function scriptedRandom(values: number[]): () => number {
+  let i = 0;
+  return () => (i < values.length ? values[i++] : 0);
+}
+
 void (async () => {
   // -------------------------------------------------------------------------
   process.stdout.write('\nCountry-list normalisation (order / skip / dedup):\n');
@@ -300,42 +306,70 @@ void (async () => {
   });
 
   // -------------------------------------------------------------------------
-  process.stdout.write('\nAnti-block throttle (Phase 9, spec row 23):\n');
+  process.stdout.write('\nRandomized anti-block throttle (Phase 9, spec rows 23,28):\n');
 
-  await check('throttle: pauses after every N countries that ran, never after the last', async () => {
+  const THROTTLE_BOUNDS = { throttleEveryMin: 1, throttleEveryMax: 5, throttlePauseMinMs: 120000, throttlePauseMaxMs: 420000 };
+
+  await check('throttle: random burst sizes + random pause durations, both re-drawn each break', async () => {
     const sleeps: number[] = [];
+    // RNG script (consumed in order): initial burst 0.7→4; then per break: pause-rnd, burst-rnd.
+    // 0.7→burst4 | 0.5→pause270000,0.0→burst1 | 0.0→pause120000,0.3→burst2 | 0.9→pause390000,0.9→burst5.
+    const rng = scriptedRandom([0.7, 0.5, 0.0, 0.0, 0.3, 0.9, 0.9]);
     const deps: BatchDeps = {
       runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
       captureFailure: async () => null,
       sleep: async (ms) => void sleeps.push(ms),
+      random: rng,
     };
-    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D', 'E'], GLOBAL, cfg({ throttleEvery: 2, throttlePauseMs: 120000 }), CODES, log, 'run-thr', deps);
-    assert.equal(s.success, 5);
-    // worked hits 2 (after B) and 4 (after D) → two 120s pauses; NEVER after E (the last country).
-    assert.deepEqual(sleeps, [120000, 120000]);
+    const countries = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'C12'];
+    const s = await runBatch(PAGE, countries, GLOBAL, cfg(THROTTLE_BOUNDS), CODES, log, 'run-thr', deps);
+    assert.equal(s.success, 12);
+    // Bursts 4,1,2,5 → breaks BEFORE C5, C6, C8; each pause a distinct random value within [2min,7min].
+    assert.deepEqual(sleeps, [270000, 120000, 390000]);
+    for (const ms of sleeps) assert.ok(ms >= 120000 && ms <= 420000, `pause ${ms} within [120000,420000]`);
   });
 
-  await check('throttle: throttleEvery=0 disables the pause entirely', async () => {
+  await check('throttle: throttleEveryMax=0 disables it (RNG never consulted)', async () => {
     const sleeps: number[] = [];
     const deps: BatchDeps = {
       runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
       captureFailure: async () => null,
       sleep: async (ms) => void sleeps.push(ms),
+      random: () => {
+        throw new Error('RNG must not be called when the throttle is disabled');
+      },
     };
-    const s = await runBatch(PAGE, ['A', 'B', 'C'], GLOBAL, cfg({ throttleEvery: 0, throttlePauseMs: 120000 }), CODES, log, 'run-thr0', deps);
+    const s = await runBatch(PAGE, ['A', 'B', 'C'], GLOBAL, cfg({ ...THROTTLE_BOUNDS, throttleEveryMax: 0 }), CODES, log, 'run-thr0', deps);
     assert.equal(s.success, 3);
     assert.deepEqual(sleeps, []);
   });
 
-  await check('throttle: resume-SKIPPED countries do not count toward the cadence', async () => {
+  await check('throttle: NO pause trails the last country even when it completes a burst (kills the guard-coverage gap)', async () => {
     const sleeps: number[] = [];
-    // A and B are already SUCCESS+valid → both early-skip (attempts 0, `continue` before the throttle).
+    // burst=2 throughout (0.3→2). 4 countries: break BEFORE C3; C4 completes the 2nd burst but is
+    // LAST, so NO pause fires after it. Exactly ONE pause proves nothing trails the final run.
+    const rng = scriptedRandom([0.3, 0.0, 0.3]); // initBurst2 | pause120000, nextBurst2
+    const deps: BatchDeps = {
+      runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
+      captureFailure: async () => null,
+      sleep: async (ms) => void sleeps.push(ms),
+      random: rng,
+    };
+    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D'], GLOBAL, cfg(THROTTLE_BOUNDS), CODES, log, 'run-thr-last', deps);
+    assert.equal(s.success, 4);
+    assert.deepEqual(sleeps, [120000]); // one pause (before C), none after D
+  });
+
+  await check('throttle: trailing resume-SKIPS never trigger a wasted pause (pause is BEFORE the next run)', async () => {
+    const sleeps: number[] = [];
+    // E, F already SUCCESS+valid → early-skip (`continue` before the throttle check).
     const seed = upsertEntry(
       upsertEntry(emptyManifest('seed', '200001-202606', 'now'), {
-        country: 'A', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'A.xlsx', targetPath: '/out/A.xlsx',
+        country: 'E', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'E.xlsx', targetPath: '/out/E.xlsx',
       }),
-      { country: 'B', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'B.xlsx', targetPath: '/out/B.xlsx' },
+      { country: 'F', requestedRange: '200001-202606', status: 'SUCCESS', attempts: 1, updatedAt: 'now', file: 'F.xlsx', targetPath: '/out/F.xlsx' },
     );
+    const rng = scriptedRandom([0.3, 0.0, 0.3]); // initBurst2 | pause120000, nextBurst2
     const deps: BatchDeps = {
       runCountry: async (_page: Page, country: string) => mkResult(country, 'SUCCESS'),
       captureFailure: async () => null,
@@ -344,13 +378,14 @@ void (async () => {
       writeManifest: () => undefined,
       validateFile: async () => true,
       now: () => 'now',
+      random: rng,
     };
-    const config: AppConfig = { ...cfg({ throttleEvery: 2, throttlePauseMs: 120000 }), manifestFile: './manifests/thr.json' };
-    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D', 'E'], GLOBAL, config, CODES, log, 'run-thr-skip', deps);
-    assert.equal(s.skipped, 2); // A, B early-skipped
-    assert.equal(s.success, 3); // C, D, E ran
-    // Only the 3 that RAN count: worked C=1, D=2 → one pause after D; E=3, no pause. If skips
-    // counted, pauses would fall after B and D (two) — exactly one pause proves skips are excluded.
+    const config: AppConfig = { ...cfg(THROTTLE_BOUNDS), manifestFile: './manifests/thr.json' };
+    const s = await runBatch(PAGE, ['A', 'B', 'C', 'D', 'E', 'F'], GLOBAL, config, CODES, log, 'run-thr-skip', deps);
+    assert.equal(s.skipped, 2); // E, F
+    assert.equal(s.success, 4); // A, B, C, D
+    // A,B run (burst 2) → break BEFORE C; C,D run; D completes burst 2 but E,F are skips that
+    // `continue` before the throttle check, so NO pause is wasted. Exactly one pause total.
     assert.deepEqual(sleeps, [120000]);
   });
 

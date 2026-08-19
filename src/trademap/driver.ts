@@ -30,33 +30,24 @@ export interface UrlFilters {
 const FREQ_URL: Record<string, string> = { monthly: 'month', quarterly: 'quarter', yearly: 'year' };
 const VIEWBY_URL: Record<string, string> = { exporter: 'byPartner', product: 'byProduct' };
 
-// Detail (product-detail granularity) URL tokens for the byProduct view (Phase 9, spec row 21).
-// Decoded from the user's real byProduct URL, which showed HS2 encoded as `2`; by the same
-// scheme HS4=`4`, HS6=`6`. NTL is DELIBERATELY ABSENT: its URL token has never been captured,
-// and inventing one is forbidden (CLAUDE.md — "never invent a … field name … not written down").
-const DETAIL_URL_TOKENS: Record<string, string> = { hs2: '2', hs4: '4', hs6: '6' };
+// Detail (product-detail granularity) URL tokens for the byProduct view (Phase 9, spec rows 21,27).
+// All decoded from REAL logged-in byProduct URLs — never invented (CLAUDE.md):
+//   HS2=`2`, HS4=`4`, HS6=`6`, and NTL=`10` (captured 2026-08-19 from a real India (c/699) imports
+//   byProduct URL: …/byProduct/month/200704-202605/10/direct/values/USD/table).
+const DETAIL_URL_TOKENS: Record<string, string> = { ntl: '10', hs2: '2', hs4: '4', hs6: '6' };
 
 /**
- * PURE. Map a Detail label (NTL / HS2 / HS4 / HS6) to its byProduct URL token.
- * Throws `DETAIL_TOKEN_UNCAPTURED` for NTL (token not yet captured) or any unknown value,
- * so a Product-view run fails LOUD rather than exporting a guessed/invented URL. The user
- * chose "hard-error" over silently substituting HS6 — this is the single enforcement point.
+ * PURE. Map a Detail label (NTL / HS2 / HS4 / HS6) to its byProduct URL token. Throws
+ * `DETAIL_TOKEN_UNCAPTURED` for any value whose real token has NOT been captured, so a Product-view
+ * run fails LOUD rather than exporting a guessed/invented URL — never substitutes a different level.
  */
 export function resolveDetailUrlToken(detail: string): string {
   const key = detail.trim().toLowerCase();
   const token = DETAIL_URL_TOKENS[key];
   if (token) return token;
-  if (key === 'ntl') {
-    throw new Error(
-      'DETAIL_TOKEN_UNCAPTURED: the byProduct URL token for Detail=NTL has not been captured yet. ' +
-        'Capture one real …/byProduct/{freq}/{range}/<NTL-token>/… URL from a logged-in session and add it ' +
-        'to DETAIL_URL_TOKENS in driver.ts before running an NTL byProduct export — never invent it (CLAUDE.md). ' +
-        'Choose Detail=HS6 instead if you do not need national-tariff-line granularity.',
-    );
-  }
   throw new Error(
     `DETAIL_TOKEN_UNCAPTURED: unknown Detail value "${detail}" — no known byProduct URL token. ` +
-      'Known tokens: HS2, HS4, HS6. NTL is uncaptured. Capture a real URL before wiring a new Detail value.',
+      'Known tokens: NTL, HS2, HS4, HS6. Capture a real logged-in URL for any other level before wiring it (never invent).',
   );
 }
 

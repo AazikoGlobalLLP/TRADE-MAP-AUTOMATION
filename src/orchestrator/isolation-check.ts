@@ -260,17 +260,33 @@ check('parseFiltersFromUrl round-trips a well-formed byProduct URL (detail segme
   assert.equal(parsed.source, 'direct'); // NOT the '6' detail token
 });
 
-check('resolveDetailUrlToken maps HS2/HS4/HS6; NTL + unknown throw DETAIL_TOKEN_UNCAPTURED', () => {
+check('resolveDetailUrlToken maps NTL/HS2/HS4/HS6 to real captured tokens; unknown still throws', () => {
+  assert.equal(resolveDetailUrlToken('NTL'), '10'); // captured 2026-08-19 from a real India byProduct URL
+  assert.equal(resolveDetailUrlToken('ntl'), '10');
   assert.equal(resolveDetailUrlToken('HS2'), '2');
   assert.equal(resolveDetailUrlToken('hs4'), '4');
   assert.equal(resolveDetailUrlToken('HS6'), '6');
-  assert.throws(() => resolveDetailUrlToken('NTL'), /DETAIL_TOKEN_UNCAPTURED/);
-  assert.throws(() => resolveDetailUrlToken('HS8'), /DETAIL_TOKEN_UNCAPTURED/);
+  assert.throws(() => resolveDetailUrlToken('HS8'), /DETAIL_TOKEN_UNCAPTURED/); // uncaptured → never invented
 });
 
-check('buildCanonicalUrl(byProduct, Detail=NTL) hard-errors — never invents a token', () => {
+// GROUND TRUTH: buildCanonicalUrl must reproduce the user's REAL captured byProduct URL byte-for-byte.
+check('buildCanonicalUrl reproduces the real India byProduct/NTL URL exactly (token 10)', () => {
+  const url = buildCanonicalUrl(
+    'https://www.trademap.org',
+    '699', // India
+    { ...PRODUCT_FILTERS, tradeFlow: 'imports', detail: 'NTL' }, // imports, byProduct, source=direct, freq=monthly
+    '200704',
+    '202605',
+  );
+  assert.equal(
+    url,
+    'https://www.trademap.org/en/goods/time-series/imports/c/699/c/000/p/ALL/byProduct/month/200704-202605/10/direct/values/USD/table',
+  );
+});
+
+check('buildCanonicalUrl(byProduct, uncaptured Detail) still hard-errors — never invents a token', () => {
   assert.throws(
-    () => buildCanonicalUrl('https://www.trademap.org', '842', { ...PRODUCT_FILTERS, detail: 'NTL' }, '200001', '202606'),
+    () => buildCanonicalUrl('https://www.trademap.org', '842', { ...PRODUCT_FILTERS, detail: 'HS8' }, '200001', '202606'),
     /DETAIL_TOKEN_UNCAPTURED/,
   );
 });

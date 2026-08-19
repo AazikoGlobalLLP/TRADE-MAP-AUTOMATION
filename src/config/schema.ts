@@ -49,8 +49,14 @@ export interface BatchConfig {
   retryDelayMs: number; // inter-attempt backoff (not a state-wait)
   continueOnFailure: boolean; // false → the first FAILED country aborts the batch
   evidenceDir: string; // base dir for failure screenshots + JSON
-  throttleEvery: number; // Phase 9 (spec row 23): pause after every N countries that ran (0 = disabled)
-  throttlePauseMs: number; // Phase 9: how long each anti-block pause lasts, in ms
+  // Phase 9 (spec rows 23,28) RANDOMIZED anti-block throttle. Each break comes after a RANDOM
+  // burst of [throttleEveryMin, throttleEveryMax] countries that ran, and lasts a RANDOM
+  // [throttlePauseMinMs, throttlePauseMaxMs]; both re-drawn every break so the cadence keeps
+  // changing (harder to fingerprint, more human-like). throttleEveryMax = 0 disables the throttle.
+  throttleEveryMin: number; // fewest countries in a burst before a break (≥ 1 when enabled)
+  throttleEveryMax: number; // most countries in a burst before a break (0 = throttle disabled)
+  throttlePauseMinMs: number; // shortest anti-block pause, in ms
+  throttlePauseMaxMs: number; // longest anti-block pause, in ms
 }
 
 export interface AppConfig {
@@ -75,15 +81,18 @@ export const DEFAULT_MANIFEST_FILE = './manifests/latest-run.json';
 /** Default human-readable run-report path (Phase 6, §31). Applied by validateConfig when unset. */
 export const DEFAULT_RUN_REPORT_FILE = './manifests/run-report.xlsx';
 
-/** Defaults for the optional `batch` block (spec-lock row 11; Phase 9 row 23 throttle N=5/M=120s). */
+/** Defaults for the optional `batch` block (spec-lock row 11; Phase 9 row 28 randomized throttle). */
 export const BATCH_DEFAULTS: BatchConfig = {
   inputFile: './input/countries.xlsx',
   maxAttemptsPerCountry: 3,
   retryDelayMs: 2000,
   continueOnFailure: true,
   evidenceDir: './screenshots/failures',
-  throttleEvery: 5, // spec-locked at build 2026-08-19: pause after every 5 countries
-  throttlePauseMs: 120000, // spec-locked at build 2026-08-19: 120-second anti-block pause
+  // spec-locked at build 2026-08-19: break after a random 1–5 countries, for a random 2–7 minutes.
+  throttleEveryMin: 1,
+  throttleEveryMax: 5,
+  throttlePauseMinMs: 120000, // 2 minutes
+  throttlePauseMaxMs: 420000, // 7 minutes
 };
 
 /** The only range mode the PRD defines (§14). Unknown modes are rejected. */
@@ -133,6 +142,13 @@ function reqBoolean(v: unknown, field: string): boolean {
 function reqPositiveInt(v: unknown, field: string): number {
   if (typeof v !== 'number' || !Number.isInteger(v) || v <= 0) {
     throw new ConfigError(field, 'must be a positive integer');
+  }
+  return v;
+}
+
+function reqNonNegativeInt(v: unknown, field: string): number {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
+    throw new ConfigError(field, 'must be a non-negative integer');
   }
   return v;
 }
@@ -241,20 +257,17 @@ export function validateConfig(raw: unknown): AppConfig {
       batch.continueOnFailure = reqBoolean(rawBatch.continueOnFailure, 'batch.continueOnFailure');
     }
     if (rawBatch.evidenceDir !== undefined) batch.evidenceDir = reqString(rawBatch.evidenceDir, 'batch.evidenceDir');
-    // Phase 9 (row 23) anti-block throttle. Both non-negative integers; 0 disables the pause.
-    if (rawBatch.throttleEvery !== undefined) {
-      const v = rawBatch.throttleEvery;
-      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
-        throw new ConfigError('batch.throttleEvery', 'must be a non-negative integer (0 disables the throttle)');
-      }
-      batch.throttleEvery = v;
+    // Phase 9 (row 28) RANDOMIZED anti-block throttle. Each field is a non-negative integer;
+    // min ≤ max per pair. throttleEveryMax = 0 disables the throttle.
+    if (rawBatch.throttleEveryMin !== undefined) batch.throttleEveryMin = reqNonNegativeInt(rawBatch.throttleEveryMin, 'batch.throttleEveryMin');
+    if (rawBatch.throttleEveryMax !== undefined) batch.throttleEveryMax = reqNonNegativeInt(rawBatch.throttleEveryMax, 'batch.throttleEveryMax');
+    if (rawBatch.throttlePauseMinMs !== undefined) batch.throttlePauseMinMs = reqNonNegativeInt(rawBatch.throttlePauseMinMs, 'batch.throttlePauseMinMs');
+    if (rawBatch.throttlePauseMaxMs !== undefined) batch.throttlePauseMaxMs = reqNonNegativeInt(rawBatch.throttlePauseMaxMs, 'batch.throttlePauseMaxMs');
+    if (batch.throttleEveryMin > batch.throttleEveryMax && batch.throttleEveryMax > 0) {
+      throw new ConfigError('batch.throttleEveryMin', `must be ≤ throttleEveryMax (${batch.throttleEveryMax})`);
     }
-    if (rawBatch.throttlePauseMs !== undefined) {
-      const v = rawBatch.throttlePauseMs;
-      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
-        throw new ConfigError('batch.throttlePauseMs', 'must be a non-negative integer (milliseconds)');
-      }
-      batch.throttlePauseMs = v;
+    if (batch.throttlePauseMinMs > batch.throttlePauseMaxMs) {
+      throw new ConfigError('batch.throttlePauseMinMs', `must be ≤ throttlePauseMaxMs (${batch.throttlePauseMaxMs})`);
     }
   }
 
