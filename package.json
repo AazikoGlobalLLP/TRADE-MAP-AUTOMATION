@@ -14,6 +14,7 @@
     "batch": "tsc && node dist/index.js --batch",
     "start": "node dist/index.js",
     "calibrate": "tsc && node dist/tools/calibrate-probe.js",
+    "calibrate:byproduct": "tsc && node dist/tools/calibrate-byproduct.js",
     "harvest": "tsc && node dist/tools/harvest-codes.js",
     "test:isolation": "tsx src/orchestrator/isolation-check.ts",
     "test:batch": "tsx src/orchestrator/batch-check.ts",
