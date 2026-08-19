@@ -17,27 +17,31 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
 | 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
 | 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (19 rows) + built; `test:runplan` 19/19, tsc clean. **By-exporter works LIVE** (imports 4/4 proven); by-product errors (uncalibrated → Phase 9). Detail/NTL prompt added |
-| 9 — Live-DOM-driven + anti-block redesign | ⬜ TODO — **#1 PRIORITY**, spec-locked (rows 20–24 in the Phase 8 spec). Dynamic DOM questionnaire, byProduct URL wiring (real URL decoded), Detail NTL→HS6, throttle-between-countries so accounts stop blocking |
+| 9 — Live-DOM-driven + anti-block redesign | 🟨 OFFLINE SLICE BUILT 2026-08-19 — build-time spec-lock (rows 25–27): throttle **N=5 / M=120s**, Detail=NTL **hard-errors** (never invents/substitutes). byProduct URL builder+parser (detail segment), HS2/4/6 tokens, anti-block throttle, NTL preflight, Monthly-PRO warning all wired + tested (isolation 35, batch 25, runplan 20; tsc clean). **Still HEADED:** live-DOM questionnaire (row 20) + byProduct `readShownRange`/heading calibration + a real `Detail=NTL` URL capture |
 
 ## Now
-**Phase 8 built; by-exporter works LIVE, by-product is the Phase 9 job.** `npm run export:interactive` confirms
-the country count, launches headed, walks the query prompts (incl. the new Detail/NTL prompt on View by = Product),
-and drives the existing batch engine. A live run exported all 4 fixture countries SUCCESS on imports/by-exporter.
-**View by = Product errors** because that query shape (byProduct URL + Detail segment + range/heading readers) was
-never calibrated. The user provided the real byProduct URL and DOM, and asked for a redesign: drive the whole
-questionnaire off the LIVE DOM (re-analyse after each answer), Detail NTL→HS6, and a **throttle between countries**
-because **accounts are getting blocked repeatedly**. All captured as **Phase 9** (spec rows 20–24). Offline green:
-`test:runplan` 19/19, tsc clean, existing 22/24/8/29 unchanged. Committed on `phase-1-poc`; **not yet pushed**.
+**Phase 9 offline slice is BUILT (spec rows 25–27 locked with the user 2026-08-19).** The byProduct query is now wired
+by URL: `buildCanonicalUrl` inserts the `{detail}` segment (`…/byProduct/{freq}/{range}/{detail}/{source}/…`),
+`parseFiltersFromUrl` skips it so the query gate reads the right positions, and HS2/HS4/HS6 → `2`/`4`/`6`. **Detail=NTL
+hard-errors** (its token is uncaptured — never invented, never substituted): the interactive path refuses before any
+browser export (exit 2), `--batch` fails fast. The **anti-block throttle** pauses **120 s after every 5 countries that
+ran** (`batch.throttleEvery`/`throttlePauseMs`, injectable-sleep, resume-skips excluded, never after the last; `0`
+disables). Monthly warning now says **PRO-locked**. Green: isolation 35, batch 25, runplan 20 (manifest 24 / report 8
+unchanged), tsc clean. Committed on `phase-1-poc`; **not yet pushed**.
+
+**Still HEADED (needs the user's live session, NOT built):** the live-DOM re-analyse-after-each-answer questionnaire
+(row 20), the byProduct `readShownRange`/heading calibration, and capturing a real `Detail=NTL` URL. byProduct **HS6**
+is wired by URL but unverified end-to-end live.
 
 ## Next 3
-1. **#1 — Phase 9: live-DOM-driven + anti-block redesign.** Build from spec rows 20–24: navigate to the byProduct
-   data page → extract DOM → drive questions dynamically (re-analyse after each answer) → Detail NTL→HS6 → wire the
-   decoded byProduct URL → add the throttle-between-countries buffer. **First spec-lock the exact throttle N + pause M
-   and capture a real `Detail=NTL` URL** (never invent it). The live-DOM calibration is the user's headed session.
-2. **Stop the account blocking NOW (interim):** don't re-run the full export to "check", and space runs out until the
-   throttle (row 23) ships. Monthly is PRO-locked — don't hammer it.
-3. **Push a properly-named branch + PR** (carries Phases 1–8): e.g.
-   `git checkout -b phase-8-interactive-query-builder` then `git push -u origin phase-8-interactive-query-builder`.
+1. **#1 — HEADED calibration session (the user's).** With a logged-in browser: (a) capture a real `Detail=NTL` byProduct
+   URL and add its token to `DETAIL_URL_TOKENS` (driver.ts) to unlock NTL; (b) confirm a byProduct **HS6** export runs
+   end-to-end (does Trade Map accept the explicit range or only `default`? does `readShownRange`/heading read the
+   byProduct table?); (c) pin the `optionsReader` overlay selectors so Data source/type/Currency read live not fallback.
+2. **Verify the throttle on a real longer run** — confirm the 120 s / every-5 pause actually stops the account blocking;
+   adjust `throttleEvery`/`throttlePauseMs` in config only (no code) if blocking persists. Monthly is PRO-locked — don't hammer.
+3. **Push a properly-named branch + PR** (carries Phases 1–9 offline): e.g.
+   `git checkout -b phase-9-byproduct-throttle` then `git push -u origin phase-9-byproduct-throttle`.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress

@@ -49,6 +49,17 @@ These rows are a coherent NEXT iteration (call it **Phase 9**): make the questio
 - Do NOT invent NTL's URL token — capture a real `Detail=NTL` URL first.
 - Exact throttle N + pause M are spec-lock-at-build values (don't guess).
 
+### Phase 9 — build-time spec-lock (rows 25–27, resolved with the user 2026-08-19, BUILT)
+
+| # | Ambiguity | Locked value | Why |
+|---|-----------|--------------|-----|
+| 25 | Throttle cadence N (row 23) | **N = 5** — pause after every 5 countries that actually ran. `config.batch.throttleEvery`; `0` disables. Counts only countries that reached `runCountry` (resume-skips excluded); never pauses after the last country. | User choice (2026-08-19) between "after 1 / 5 / 10 / 20". 5 spreads load meaningfully without stalling a 204-country run. |
+| 26 | Throttle pause M (row 23) | **M = 120000 ms (120 s)**. `config.batch.throttlePauseMs`. Reuses `runBatch`'s injectable `sleep` (so it's proven offline). Politeness pause, NEVER a limit-bypass. | User choice (2026-08-19). Two minutes is a real breather against blocking without being punitive. |
+| 27 | Detail=NTL when its URL token is uncaptured (updates row 21/22) | **HARD-ERROR the run.** `resolveDetailUrlToken('NTL')` throws `DETAIL_TOKEN_UNCAPTURED`; the interactive path refuses BEFORE any browser export (exit 2); `--batch`/`--country` fail fast (fatal marker, no wasted retries). HS2/HS4/HS6 resolve to `2`/`4`/`6`. **Never substitutes HS6 silently, never invents the NTL token.** | User choice (2026-08-19): refuse over substituting. Matches CLAUDE.md "never invent/assume"; substituting HS6 would export coarser data under an NTL request. Capture a real `Detail=NTL` URL, add it to `DETAIL_URL_TOKENS`, to enable NTL. |
+
+**Built 2026-08-19** — offline-provable slice only: byProduct URL builder + parser, Detail token resolver, throttle, NTL hard-error/preflight, Monthly-PRO warning. Tests: isolation 35, batch 25, runplan 20 (manifest 24 / report 8 unchanged), `tsc` clean.
+**Still HEADED (not built):** the live-DOM re-analyse-after-each-answer questionnaire (row 20) and the byProduct `readShownRange`/heading calibration remain the user's headed session; byProduct HS6 export is wired by URL but unverified end-to-end live.
+
 ## OUT OF SCOPE for Phase 8 (will NOT build)
 - Trade indicators / Companies / Trade in services datasets (prompted, then graceful `DATASET_UNSUPPORTED` exit).
 - **DOM-driving** Numbers display or any control not encoded in the canonical URL (recorded only).

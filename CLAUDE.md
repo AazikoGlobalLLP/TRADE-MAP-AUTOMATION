@@ -63,17 +63,23 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
 - To VERIFY a finished export, read `manifests/latest-run.json` + the files on disk — do NOT re-run
   the export "just to check" (it re-downloads all 204). Acceptance = input count == manifest entries
   == files on disk, every SUCCESS→existing non-zero file, effective ranges vary (isolation held).
-- The whole pipeline is calibrated for **View by = Exporter (byPartner)** ONLY. **View by = Product (byProduct)
-  is a DIFFERENT URL shape** and errors until calibrated. Real byProduct URL (confirmed 2026-08-19):
+- **View by = Product (byProduct)** is a DIFFERENT URL shape from byPartner. As of Phase 9 (2026-08-19) it is
+  URL-WIRED but NOT yet verified end-to-end live. Real byProduct URL (confirmed 2026-08-19):
   `…/time-series/exports/c/000/c/000/p/ALL/byProduct/year/default/2/direct/values/USD/table` — it inserts a
   **Detail** segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
-  byPartner has none. Detail HS2=`2`, HS4=`4`, HS6=`6`; **NTL's token is UNKNOWN — capture a real `Detail=NTL` URL,
-  never invent it.** Range may be the literal `default` (=MAX). Detail default = NTL, fallback = HS6.
+  byPartner has none. `buildCanonicalUrl` (driver.ts) now branches on `viewBy=product` to insert it and
+  `parseFiltersFromUrl` (filters.ts) skips it. Detail tokens HS2=`2`, HS4=`4`, HS6=`6` (in `DETAIL_URL_TOKENS`);
+  **NTL's token is STILL UNKNOWN** — `resolveDetailUrlToken('NTL')` HARD-ERRORS (`DETAIL_TOKEN_UNCAPTURED`), never
+  invents/substitutes (user's choice 2026-08-19). To enable NTL: capture a real `Detail=NTL` URL, add its token to
+  `DETAIL_URL_TOKENS`. Range is emitted explicitly as `YYYYMM-YYYYMM`; the captured URL used the literal `default`
+  (=MAX) — whether byProduct requires `default` is a HEADED follow-up. Detail default = NTL, fallback = HS6.
+  **STILL HEADED (uncalibrated):** the live-DOM questionnaire, and `readShownRange`/heading against the byProduct table.
 - **Monthly frequency is PRO-locked** (the beta shows "Monthly 🔒PRO"). The Monthly signal is "needs a PRO account",
   not just "needs login". Yearly/Quarterly are free.
-- **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out; and a long
-  run needs a THROTTLE between countries (a break every N countries — Phase 9 row 23). This is a politeness throttle,
-  never a limit-bypass (compliance boundary).
+- **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out. The
+  anti-block THROTTLE now exists (Phase 9): `runBatch` pauses `batch.throttlePauseMs` (default 120000) after every
+  `batch.throttleEvery` (default 5) countries that actually ran — resume-skips don't count, never after the last,
+  `0` disables. Tune it in config only, no code. This is a politeness throttle, NEVER a limit-bypass (compliance boundary).
 
 ## Sibling repos / contracts
 None. Standalone tool. No `contracts/` directory.

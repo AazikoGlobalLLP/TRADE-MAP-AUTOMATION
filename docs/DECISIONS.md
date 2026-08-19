@@ -286,3 +286,15 @@ Format: date · decision · why · alternative rejected.
   in the handoff turn: the DOM-extraction + byProduct calibration need a live headed session (the user's), and the exact
   throttle N + pause M are spec-lock-at-build values. Rejected: half-implementing during handoff / guessing the throttle
   numbers or the NTL token.
+- **2026-08-19 · Phase 9 build spec-lock — throttle N=5 / M=120000 ms; Detail=NTL hard-errors.** Why: user chose (a) pause
+  after every **5** countries for **120 s** (`batch.throttleEvery`/`throttlePauseMs`, injectable-`sleep`-driven, counts only
+  countries that ran, never after the last, `0` disables — a politeness pause, never a bypass), and (b) when NTL's byProduct
+  URL token is uncaptured, **HARD-ERROR the run** (`resolveDetailUrlToken` throws `DETAIL_TOKEN_UNCAPTURED`; interactive path
+  refuses before any browser export, exit 2; `--batch` fails fast via a fatal marker) rather than silently substituting HS6.
+  Rejected: substituting HS6 under an NTL request (exports coarser data than asked) and inventing the NTL token (CLAUDE.md).
+- **2026-08-19 · byProduct URL wired by decoding the user's real URL; range emitted explicitly, not `default`.** Why: byProduct
+  inserts a `{detail}` segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
+  `buildCanonicalUrl` branches on it and `parseFiltersFromUrl` skips it so the query gate reads the right positions. Detail
+  tokens HS2/HS4/HS6 = `2`/`4`/`6` (captured); NTL uncaptured. The frozen YYYYMM-YYYYMM range is emitted explicitly (consistent
+  with byPartner); the user's captured URL used the literal `default` there — whether byProduct requires `default` is a HEADED
+  calibration follow-up. Rejected: emitting `default` speculatively / inventing the NTL token.
