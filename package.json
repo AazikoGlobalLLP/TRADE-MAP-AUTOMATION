@@ -22,6 +22,7 @@
     "test:manifest": "tsx src/manifest/manifest-check.ts",
     "test:report": "tsx src/report/report-check.ts",
     "test:runplan": "tsx src/config/runplan-check.ts",
+    "test:console": "tsx src/logging/console-check.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

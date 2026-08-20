@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ExcelJS from 'exceljs';
 import { Page } from 'playwright';
-import { AppConfig, BATCH_DEFAULTS, FiltersConfig } from '../config/schema';
+import { AppConfig, BATCH_DEFAULTS, FiltersConfig, validateConfig, SPEED_PROFILE_PRESETS } from '../config/schema';
 import { RequestedRange } from '../trademap/rangeEngine';
 import { CountryResult, Logger } from './runCountry';
 import { runBatch, renderSummaryTable, BatchDeps } from './runBatch';
@@ -387,6 +387,131 @@ void (async () => {
     // A,B run (burst 2) → break BEFORE C; C,D run; D completes burst 2 but E,F are skips that
     // `continue` before the throttle check, so NO pause is wasted. Exactly one pause total.
     assert.deepEqual(sleeps, [120000]);
+  });
+
+  // -------------------------------------------------------------------------
+  process.stdout.write('\nEnd-of-run retry queue (Phase 10, finalRetryRounds):\n');
+
+  await check('a country that fails the main pass but recovers in a retry round → final SUCCESS, attempts accumulate', async () => {
+    let bravo = 0;
+    const { deps } = makeDeps(async (_page: Page, country: string) => {
+      if (country === 'Bravo') {
+        bravo += 1;
+        if (bravo <= 3) throw new Error('DOWNLOAD_TIMEOUT: transient'); // fails all 3 main-pass attempts
+        return mkResult(country, 'SUCCESS'); // succeeds on the first retry-round attempt (call 4)
+      }
+      return mkResult(country, 'SUCCESS');
+    });
+    const s = await runBatch(PAGE, ['Alpha', 'Bravo', 'Charlie'], GLOBAL, cfg({ finalRetryRounds: 3 }), CODES, log, 'run-rq1', deps);
+    assert.deepEqual(s.outcomes.map((o) => o.country), ['Alpha', 'Bravo', 'Charlie']); // order preserved (replaced in place)
+    const b = s.outcomes.find((o) => o.country === 'Bravo')!;
+    assert.equal(b.status, 'SUCCESS');
+    assert.equal(b.attempts, 4); // 3 main-pass + 1 retry-round attempt, accumulated
+    assert.equal(s.success, 3);
+    assert.equal(s.failed, 0);
+    assert.equal(s.exitCode, 0);
+  });
+
+  await check('a country that fails EVERY round stays FAILED with attempts summed across all rounds', async () => {
+    const { deps, captureCalls } = makeDeps(async () => {
+      throw new Error('DOWNLOAD_TIMEOUT');
+    });
+    const s = await runBatch(PAGE, ['X'], GLOBAL, cfg({ finalRetryRounds: 2, maxAttemptsPerCountry: 2 }), CODES, log, 'run-rq2', deps);
+    assert.equal(s.outcomes[0].status, 'FAILED');
+    assert.equal(s.outcomes[0].attempts, 6); // main 2 + round1 2 + round2 2
+    assert.equal(captureCalls.length, 6); // one evidence bundle per failed attempt across all passes
+    assert.equal(s.failed, 1);
+    assert.equal(s.exitCode, 1);
+  });
+
+  await check('finalRetryRounds=0 (engine default) → no retry queue, a FAILED country stays FAILED after the main pass', async () => {
+    const { deps, captureCalls } = makeDeps(async (_page: Page, country: string) => {
+      if (country === 'Z') throw new Error('DOWNLOAD_TIMEOUT');
+      return mkResult(country, 'SUCCESS');
+    });
+    const s = await runBatch(PAGE, ['Y', 'Z'], GLOBAL, cfg(), CODES, log, 'run-rq0', deps); // cfg() → BATCH_DEFAULTS.finalRetryRounds=0
+    assert.equal(s.outcomes.find((o) => o.country === 'Z')!.attempts, 3); // only the main pass, no extra rounds
+    assert.equal(captureCalls.length, 3);
+    assert.equal(s.failed, 1);
+  });
+
+  await check('LOGIN_REQUIRED during a retry round aborts the whole batch (exit 2)', async () => {
+    let bad = 0;
+    const { deps } = makeDeps(async (_page: Page, country: string) => {
+      if (country === 'Bad') {
+        bad += 1;
+        if (bad <= 3) throw new Error('DOWNLOAD_TIMEOUT'); // fails the main pass → queued
+        throw new Error('LOGIN_REQUIRED: session died'); // fatal during the retry round
+      }
+      return mkResult(country, 'SUCCESS');
+    });
+    const s = await runBatch(PAGE, ['Good', 'Bad'], GLOBAL, cfg({ finalRetryRounds: 3 }), CODES, log, 'run-rq3', deps);
+    assert.equal(s.aborted, true);
+    assert.equal(s.exitCode, 2);
+    assert.equal(s.outcomes.find((o) => o.country === 'Good')!.status, 'SUCCESS');
+    assert.equal(s.outcomes.find((o) => o.country === 'Bad')!.status, 'FAILED');
+    assert.match(s.abortReason ?? '', /LOGIN_REQUIRED/);
+  });
+
+  await check('continueOnFailure=false disables the retry queue (a deliberate stop, not a queue)', async () => {
+    const { deps } = makeDeps(async (_page: Page, country: string) => {
+      if (country === 'Q') throw new Error('DOWNLOAD_TIMEOUT');
+      return mkResult(country, 'SUCCESS');
+    });
+    const s = await runBatch(PAGE, ['P', 'Q', 'R'], GLOBAL, cfg({ continueOnFailure: false, finalRetryRounds: 3 }), CODES, log, 'run-rq4', deps);
+    assert.deepEqual(s.outcomes.map((o) => o.country), ['P', 'Q']); // stopped at Q, R never ran, no retry queue
+    assert.equal(s.outcomes.find((o) => o.country === 'Q')!.attempts, 3); // just the main-pass attempts
+    assert.equal(s.exitCode, 1);
+  });
+
+  // -------------------------------------------------------------------------
+  process.stdout.write('\nSpeed profile + finalRetryRounds config (Phase 10):\n');
+
+  // Minimal valid raw config; `batch` overrides are merged in for each assertion.
+  const rawCfg = (batch: Record<string, unknown>): unknown => ({
+    tradeMapBaseUrl: 'https://www.trademap.org',
+    outputDirectory: './output',
+    browserProfileDir: './browser-profile',
+    logsDir: './logs',
+    countryCodesFile: './config/country-codes.json',
+    filenameTemplate: '{country}.{extension}',
+    filters: { ...FILTERS },
+    datePolicy: { requestedStart: '200001', requestedEnd: '202606', mode: 'MAX_WITHIN_REQUESTED_RANGE' },
+    download: { format: 'xlsx', overwrite: false, timeoutMs: 1000, downloadAttempts: 1 },
+    batch: { inputFile: './input/countries.xlsx', ...batch },
+  });
+
+  await check('speedProfile "balanced" sets the four throttle numbers from the preset', () => {
+    const c = validateConfig(rawCfg({ speedProfile: 'balanced' }));
+    assert.equal(c.batch.speedProfile, 'balanced');
+    assert.equal(c.batch.throttleEveryMin, SPEED_PROFILE_PRESETS.balanced.throttleEveryMin);
+    assert.equal(c.batch.throttleEveryMax, SPEED_PROFILE_PRESETS.balanced.throttleEveryMax);
+    assert.equal(c.batch.throttlePauseMinMs, SPEED_PROFILE_PRESETS.balanced.throttlePauseMinMs);
+    assert.equal(c.batch.throttlePauseMaxMs, SPEED_PROFILE_PRESETS.balanced.throttlePauseMaxMs);
+  });
+
+  await check('speedProfile "fast" is faster than "safe" (fewer/shorter pauses) yet never disables the throttle', () => {
+    const fast = validateConfig(rawCfg({ speedProfile: 'fast' })).batch;
+    const safe = validateConfig(rawCfg({ speedProfile: 'safe' })).batch;
+    assert.ok(fast.throttlePauseMaxMs < safe.throttlePauseMaxMs, 'fast pauses are shorter');
+    assert.ok(fast.throttleEveryMax > safe.throttleEveryMax, 'fast runs more countries per burst');
+    assert.ok(fast.throttleEveryMax > 0, 'throttle stays ON (never disabled by a profile)');
+  });
+
+  await check('an explicit throttle field overrides the speedProfile preset', () => {
+    const c = validateConfig(rawCfg({ speedProfile: 'safe', throttlePauseMinMs: 5000 })).batch;
+    assert.equal(c.throttlePauseMinMs, 5000); // explicit wins
+    assert.equal(c.throttlePauseMaxMs, SPEED_PROFILE_PRESETS.safe.throttlePauseMaxMs); // untouched fields still from preset
+  });
+
+  await check('an unknown speedProfile is rejected with CONFIG_INVALID', () => {
+    assert.throws(() => validateConfig(rawCfg({ speedProfile: 'ludicrous' })), /CONFIG_INVALID: batch\.speedProfile/);
+  });
+
+  await check('finalRetryRounds parses (non-negative int) and defaults to 0', () => {
+    assert.equal(validateConfig(rawCfg({ finalRetryRounds: 5 })).batch.finalRetryRounds, 5);
+    assert.equal(validateConfig(rawCfg({})).batch.finalRetryRounds, 0);
+    assert.throws(() => validateConfig(rawCfg({ finalRetryRounds: -1 })), /CONFIG_INVALID: batch\.finalRetryRounds/);
   });
 
   // -------------------------------------------------------------------------

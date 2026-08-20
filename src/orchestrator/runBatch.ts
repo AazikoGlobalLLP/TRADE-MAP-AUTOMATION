@@ -147,7 +147,7 @@ export async function runBatch(
   deps: BatchDeps = defaultBatchDeps,
   force = false,
 ): Promise<BatchSummary> {
-  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir } = config.batch;
+  const { maxAttemptsPerCountry, retryDelayMs, continueOnFailure, evidenceDir, finalRetryRounds } = config.batch;
   const { throttleEveryMin, throttleEveryMax, throttlePauseMinMs, throttlePauseMaxMs } = config.batch;
   const outcomes: CountryOutcome[] = [];
   let aborted = false;
@@ -201,7 +201,69 @@ export async function runBatch(
     throttle: throttleOn
       ? `random ${throttleEveryMin}-${throttleEveryMax} countries, ${throttlePauseMinMs}-${throttlePauseMaxMs}ms pause`
       : 'disabled',
+    finalRetryRounds,
   });
+
+  // Anti-block throttle helper (Phase 9/10): BEFORE running `country`, if the current burst is
+  // complete, take a random break of a random duration and draw a fresh burst size. Shared by the
+  // MAIN loop AND the end-of-run retry rounds, so retries stay exactly as polite (compliance boundary).
+  const maybeThrottleBefore = async (country: string): Promise<void> => {
+    if (throttleOn && ranSinceBreak >= breakAfter) {
+      const pauseMs = drawInt(throttlePauseMinMs, throttlePauseMaxMs, rnd);
+      const nextBurst = drawBurst();
+      log('info', 'batch.throttle', { beforeCountry: country, ranInBurst: ranSinceBreak, pauseMs, nextBurst });
+      await deps.sleep(pauseMs);
+      ranSinceBreak = 0;
+      breakAfter = nextBurst;
+    }
+  };
+
+  // Run ONE country's attempts (up to maxAttemptsPerCountry, per-attempt evidence). Returns the raw
+  // retry outcome; a FATAL error (LOGIN_REQUIRED) is re-thrown so the caller aborts the whole batch.
+  const execCountry = (country: string) =>
+    withRetry<CountryResult>(
+      () => deps.runCountry(page, country, global, config, codes, log, { collisionMode }),
+      {
+        maxAttempts: maxAttemptsPerCountry,
+        delayMs: retryDelayMs,
+        sleep: deps.sleep,
+        onAttemptError: async (err, attempt) => {
+          log('warn', 'country.attempt_failed', {
+            country,
+            attempt,
+            of: maxAttemptsPerCountry,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          await deps.captureFailure(page as EvidencePage, {
+            runId,
+            country,
+            attempt,
+            maxAttempts: maxAttemptsPerCountry,
+            error: err,
+            filters: config.filters,
+            evidenceDir,
+            timestamp: stamp(),
+            log,
+          });
+        },
+      },
+    );
+
+  // Turn a thrown FATAL into the abort bookkeeping + a FAILED outcome (session expiry is the
+  // expected fatal — remaining countries stay untouched so a resume re-run finishes them).
+  const handleFatal = (country: string, fatal: unknown): CountryOutcome => {
+    const message = fatal instanceof Error ? fatal.message : String(fatal);
+    aborted = true;
+    if (isSessionExpired(fatal)) {
+      sessionExpired = true;
+      abortReason = sessionExpiredAbortReason(country, message);
+      log('warn', 'batch.session_expired', { country });
+    } else {
+      abortReason = message;
+      log('error', 'batch.aborted', { country, error: message });
+    }
+    return { country, status: 'FAILED', attempts: 1, error: message };
+  };
 
   for (let idx = 0; idx < countries.length; idx++) {
     const country = countries[idx];
@@ -230,43 +292,10 @@ export async function runBatch(
     // burst size. Taking the pause BEFORE the run (not after) means trailing resume-skips never
     // trigger a pause and no pause ever trails the last country that runs. This is a politeness
     // buffer that spreads load; it NEVER bypasses a site limit (CLAUDE.md compliance boundary).
-    if (throttleOn && ranSinceBreak >= breakAfter) {
-      const pauseMs = drawInt(throttlePauseMinMs, throttlePauseMaxMs, rnd);
-      const nextBurst = drawBurst();
-      log('info', 'batch.throttle', { beforeCountry: country, ranInBurst: ranSinceBreak, pauseMs, nextBurst });
-      await deps.sleep(pauseMs);
-      ranSinceBreak = 0;
-      breakAfter = nextBurst;
-    }
+    await maybeThrottleBefore(country);
 
     try {
-      const outcome = await withRetry<CountryResult>(
-        () => deps.runCountry(page, country, global, config, codes, log, { collisionMode }),
-        {
-          maxAttempts: maxAttemptsPerCountry,
-          delayMs: retryDelayMs,
-          sleep: deps.sleep,
-          onAttemptError: async (err, attempt) => {
-            log('warn', 'country.attempt_failed', {
-              country,
-              attempt,
-              of: maxAttemptsPerCountry,
-              error: err instanceof Error ? err.message : String(err),
-            });
-            await deps.captureFailure(page as EvidencePage, {
-              runId,
-              country,
-              attempt,
-              maxAttempts: maxAttemptsPerCountry,
-              error: err,
-              filters: config.filters,
-              evidenceDir,
-              timestamp: stamp(),
-              log,
-            });
-          },
-        },
-      );
+      const outcome = await execCountry(country);
 
       if (outcome.ok && outcome.value) {
         // SUCCESS/SKIPPED on attempt `outcome.attempts` (1 if it worked first try).
@@ -310,17 +339,7 @@ export async function runBatch(
       // Session expiry (§28/AC-08) is the expected fatal here: remaining countries are
       // NOT touched (loop breaks → they stay PENDING), and the abort reason tells the
       // user how to resume. A non-auth fatal keeps the generic abort message.
-      const message = fatal instanceof Error ? fatal.message : String(fatal);
-      aborted = true;
-      if (isSessionExpired(fatal)) {
-        sessionExpired = true;
-        abortReason = sessionExpiredAbortReason(country, message);
-        log('warn', 'batch.session_expired', { country });
-      } else {
-        abortReason = message;
-        log('error', 'batch.aborted', { country, error: message });
-      }
-      const oc: CountryOutcome = { country, status: 'FAILED', attempts: 1, error: message };
+      const oc = handleFatal(country, fatal);
       outcomes.push(oc);
       recordAndPersist(oc);
       break;
@@ -330,6 +349,65 @@ export async function runBatch(
     // before here), so count it toward the current burst. The pause itself is taken at the TOP of
     // the NEXT running iteration, so no pause ever trails the run.
     ranSinceBreak += 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 10 — END-OF-RUN RETRY QUEUE. Any country still FAILED after the main pass is queued and
+  // retried in up to `finalRetryRounds` more rounds. Each retried country still runs its full
+  // per-country retry (maxAttemptsPerCountry) and is STILL throttled between runs (same buffer),
+  // so this never hammers the site (compliance boundary). A recovered country's FAILED outcome is
+  // REPLACED in place (and in the manifest, so a later --retry-failed won't re-run it); a
+  // LOGIN_REQUIRED anywhere aborts the whole batch. Skipped when the batch already aborted, when
+  // continueOnFailure=false (a deliberate stop), or when disabled (rounds=0 — the engine default).
+  // ---------------------------------------------------------------------------
+  if (finalRetryRounds > 0 && !aborted && continueOnFailure) {
+    let abortedInRetry = false;
+    for (let round = 1; round <= finalRetryRounds && !abortedInRetry; round++) {
+      const queue = outcomes.filter((o) => o.status === 'FAILED').map((o) => o.country);
+      if (queue.length === 0) break;
+      log('info', 'retry.round_start', { round, of: finalRetryRounds, remaining: queue.length });
+
+      for (const country of queue) {
+        await maybeThrottleBefore(country);
+        const idx = outcomes.findIndex((o) => o.country === country);
+        const priorAttempts = idx >= 0 ? outcomes[idx].attempts : 0;
+        try {
+          const outcome = await execCountry(country);
+          if (outcome.ok && outcome.value) {
+            const result = outcome.value;
+            log('info', 'retry.recovered', { country, round, status: result.status, attempts: outcome.attempts });
+            const oc: CountryOutcome = {
+              country,
+              status: result.status,
+              skipReason: result.skipReason,
+              attempts: priorAttempts + outcome.attempts,
+              effectiveRange: result.effectiveRange,
+              rangeStatus: result.rangeStatus,
+              file: result.file,
+              targetPath: result.targetPath,
+            };
+            if (idx >= 0) outcomes[idx] = oc;
+            else outcomes.push(oc);
+            recordAndPersist(oc);
+          } else {
+            const message = outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+            log('warn', 'retry.still_failed', { country, round, of: finalRetryRounds, attempts: outcome.attempts, error: message });
+            const oc: CountryOutcome = { country, status: 'FAILED', attempts: priorAttempts + outcome.attempts, error: message };
+            if (idx >= 0) outcomes[idx] = oc;
+            else outcomes.push(oc);
+            recordAndPersist(oc);
+          }
+          ranSinceBreak += 1;
+        } catch (fatal) {
+          const oc = handleFatal(country, fatal);
+          if (idx >= 0) outcomes[idx] = oc;
+          else outcomes.push(oc);
+          recordAndPersist(oc);
+          abortedInRetry = true;
+          break;
+        }
+      }
+    }
   }
 
   const success = outcomes.filter((o) => o.status === 'SUCCESS').length;

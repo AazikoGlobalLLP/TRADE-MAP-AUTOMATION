@@ -12,6 +12,7 @@ import { writeRunReport } from './report/runReport';
 import { confirmProceed, collectRunPlan, createStdinAsk } from './cli/prompt';
 import { applyRunPlan, describePlan } from './config/runPlan';
 import { resolveDetailUrlToken } from './trademap/driver';
+import { formatConsoleLine } from './logging/console';
 
 // ---------------------------------------------------------------------------
 // Tiny CLI arg reader: --key value
@@ -27,14 +28,22 @@ function hasFlag(name: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Structured logger. JSON lines to stdout + logs/runs/<runId>.log. Never logs secrets.
+// Structured logger. FULL JSON line → logs/runs/<runId>.log (the diagnosis evidence);
+// a friendly EMOJI line → the terminal (Phase 10) so a watcher reads country + status
+// at a glance instead of raw JSON. `--raw-logs` restores JSON-to-terminal for debugging.
+// Never logs secrets. Noisy internal events are file-only (formatConsoleLine → null).
 // ---------------------------------------------------------------------------
-function makeLogger(logFile: string): Logger {
+function makeLogger(logFile: string, rawConsole = false): Logger {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   return (level, event, data = {}) => {
     const line = JSON.stringify({ ts: new Date().toISOString(), level, event, ...data });
-    process.stdout.write(line + '\n');
     fs.appendFileSync(logFile, line + '\n');
+    if (rawConsole) {
+      process.stdout.write(line + '\n');
+      return;
+    }
+    const pretty = formatConsoleLine(level, event, data);
+    if (pretty !== null) process.stdout.write(pretty + '\n');
   };
 }
 
@@ -48,7 +57,7 @@ async function main(): Promise<void> {
   const configPath = getArg('config') ?? path.resolve('config/config.json');
 
   const config: AppConfig = loadConfig(configPath);
-  const log = makeLogger(path.join(config.logsDir, 'runs', `${runId}.log`));
+  const log = makeLogger(path.join(config.logsDir, 'runs', `${runId}.log`), hasFlag('raw-logs'));
   log('info', 'run.start', {
     runId,
     mode: config.datePolicy.mode,

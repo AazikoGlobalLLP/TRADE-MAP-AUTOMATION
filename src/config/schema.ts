@@ -61,6 +61,15 @@ export interface BatchConfig {
   throttleEveryMax: number; // most countries in a burst before a break (0 = throttle disabled)
   throttlePauseMinMs: number; // shortest anti-block pause, in ms
   throttlePauseMaxMs: number; // longest anti-block pause, in ms
+  // Phase 10: after the MAIN pass, any still-FAILED country is queued and retried in up to this
+  // many extra END-OF-RUN rounds (each still throttled). 0 = no end-of-run retry (engine default,
+  // keeps the offline batch harness unchanged). The production configs set 3. A LOGIN_REQUIRED in a
+  // retry round aborts like anywhere else; SKIPPED/SUCCESS leave the queue.
+  finalRetryRounds: number;
+  // Phase 10: ONE-WORD convenience that sets the four throttle numbers from a named preset
+  // (safe | balanced | fast). Any throttle*/finalRetry field set EXPLICITLY still overrides the
+  // preset. It NEVER disables the throttle (compliance boundary). Optional; absent → BATCH_DEFAULTS.
+  speedProfile?: SpeedProfile;
 }
 
 export interface AppConfig {
@@ -97,6 +106,25 @@ export const BATCH_DEFAULTS: BatchConfig = {
   throttleEveryMax: 5,
   throttlePauseMinMs: 120000, // 2 minutes
   throttlePauseMaxMs: 420000, // 7 minutes
+  // Engine default OFF (0) so the offline batch harness behaviour is unchanged; the production
+  // configs turn it on. See BatchConfig.finalRetryRounds.
+  finalRetryRounds: 0,
+};
+
+/** The named speed presets for `batch.speedProfile` (Phase 10). Anchored to written-down numbers:
+ *  `safe` = the original BATCH_DEFAULTS (1–5 countries / 2–7 min), `balanced` = the tuned
+ *  production throttle (3–6 / 45s–2.5min). `fast` is a MODEST step from balanced (6–10 / 30–90s) —
+ *  still a real politeness buffer, never a limit-bypass; documented as higher block-risk. A profile
+ *  only ever SETS throttle numbers; the throttle can never be disabled through it. */
+export type SpeedProfile = 'safe' | 'balanced' | 'fast';
+export const SPEED_PROFILES: readonly SpeedProfile[] = ['safe', 'balanced', 'fast'] as const;
+export const SPEED_PROFILE_PRESETS: Record<
+  SpeedProfile,
+  Pick<BatchConfig, 'throttleEveryMin' | 'throttleEveryMax' | 'throttlePauseMinMs' | 'throttlePauseMaxMs'>
+> = {
+  safe: { throttleEveryMin: 1, throttleEveryMax: 5, throttlePauseMinMs: 120000, throttlePauseMaxMs: 420000 },
+  balanced: { throttleEveryMin: 3, throttleEveryMax: 6, throttlePauseMinMs: 45000, throttlePauseMaxMs: 150000 },
+  fast: { throttleEveryMin: 6, throttleEveryMax: 10, throttlePauseMinMs: 30000, throttlePauseMaxMs: 90000 },
 };
 
 /** The only range mode the PRD defines (§14). Unknown modes are rejected. */
@@ -265,12 +293,30 @@ export function validateConfig(raw: unknown): AppConfig {
       batch.continueOnFailure = reqBoolean(rawBatch.continueOnFailure, 'batch.continueOnFailure');
     }
     if (rawBatch.evidenceDir !== undefined) batch.evidenceDir = reqString(rawBatch.evidenceDir, 'batch.evidenceDir');
+    // Phase 10: speedProfile — a ONE-WORD preset for the four throttle numbers. Applied FIRST so
+    // any throttle field the user ALSO sets explicitly (below) still wins. Never disables the throttle.
+    if (rawBatch.speedProfile !== undefined) {
+      const p = reqString(rawBatch.speedProfile, 'batch.speedProfile');
+      if (!(SPEED_PROFILES as readonly string[]).includes(p)) {
+        throw new ConfigError('batch.speedProfile', `unknown profile "${p}"; expected one of ${SPEED_PROFILES.join(', ')}`);
+      }
+      const preset = SPEED_PROFILE_PRESETS[p as SpeedProfile];
+      batch.throttleEveryMin = preset.throttleEveryMin;
+      batch.throttleEveryMax = preset.throttleEveryMax;
+      batch.throttlePauseMinMs = preset.throttlePauseMinMs;
+      batch.throttlePauseMaxMs = preset.throttlePauseMaxMs;
+      batch.speedProfile = p as SpeedProfile;
+    }
     // Phase 9 (row 28) RANDOMIZED anti-block throttle. Each field is a non-negative integer;
-    // min ≤ max per pair. throttleEveryMax = 0 disables the throttle.
+    // min ≤ max per pair. throttleEveryMax = 0 disables the throttle. Set here → overrides speedProfile.
     if (rawBatch.throttleEveryMin !== undefined) batch.throttleEveryMin = reqNonNegativeInt(rawBatch.throttleEveryMin, 'batch.throttleEveryMin');
     if (rawBatch.throttleEveryMax !== undefined) batch.throttleEveryMax = reqNonNegativeInt(rawBatch.throttleEveryMax, 'batch.throttleEveryMax');
     if (rawBatch.throttlePauseMinMs !== undefined) batch.throttlePauseMinMs = reqNonNegativeInt(rawBatch.throttlePauseMinMs, 'batch.throttlePauseMinMs');
     if (rawBatch.throttlePauseMaxMs !== undefined) batch.throttlePauseMaxMs = reqNonNegativeInt(rawBatch.throttlePauseMaxMs, 'batch.throttlePauseMaxMs');
+    // Phase 10: finalRetryRounds — non-negative int; 0 (default) = no end-of-run retry queue.
+    if (rawBatch.finalRetryRounds !== undefined) {
+      batch.finalRetryRounds = reqNonNegativeInt(rawBatch.finalRetryRounds, 'batch.finalRetryRounds');
+    }
     if (batch.throttleEveryMin > batch.throttleEveryMax && batch.throttleEveryMax > 0) {
       throw new ConfigError('batch.throttleEveryMin', `must be ≤ throttleEveryMax (${batch.throttleEveryMax})`);
     }
