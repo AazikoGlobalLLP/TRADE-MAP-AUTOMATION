@@ -178,6 +178,10 @@ export async function runCountry(
     frequency: cap(config.filters.frequency),
     source: cap(config.filters.source),
     currency: config.filters.currency,
+    // Data type in the name so a Values file and a Quantities file for the same country/range/detail
+    // never share a filename (would otherwise collide / resume-skip). "Quantities" / "Values" / …
+    dataType: config.filters.dataType,
+    dataTypeWord: cap(config.filters.dataType),
     start: eff.start, // raw YYYYMM (kept for backward compatibility)
     end: eff.end,
     startPretty: prettyYYYYMM(eff.start), // "2001-01"
