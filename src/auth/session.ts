@@ -32,7 +32,10 @@ export async function launchSession(
  */
 export async function isLoginPage(page: Page): Promise<boolean> {
   const url = page.url().toLowerCase();
-  if (url.includes('login') || url.includes('signin') || url.includes('logon')) {
+  // High-precision URL markers (a data page URL never contains these). `connexion` = the French
+  // login path (ITC is bilingual). If the friend's live login URL uses another word, add it here —
+  // it is captured/confirmed from a real redirect, never guessed into a false positive.
+  if (url.includes('login') || url.includes('signin') || url.includes('logon') || url.includes('connexion')) {
     return true;
   }
 

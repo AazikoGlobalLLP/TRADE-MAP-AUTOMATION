@@ -56,6 +56,15 @@ export function findEntry(manifest: Manifest, country: string): ManifestEntry | 
 }
 
 /**
+ * PURE. The set of country names the manifest recorded as FAILED (case preserved).
+ * Used by `--retry-failed` to re-run ONLY the failures without re-validating every
+ * SUCCESS file on disk (which, for 200+ large NTL workbooks, is the slow part).
+ */
+export function failedCountries(manifest: Manifest): string[] {
+  return manifest.countries.filter((e) => e.status === 'FAILED').map((e) => e.country);
+}
+
+/**
  * PURE. Return a NEW manifest with `entry` replacing any same-country entry
  * (case-insensitive, position preserved) or appended if new. Bumps `updatedAt`.
  * Never mutates the input.

@@ -221,17 +221,38 @@ export const DEFAULT_DATA_READY_TIMEOUT_MS = 300000; // 5 min — generous for h
  * in the browser, so this MUST run compiled (CLAUDE.md `__name` gotcha) — export/calibrate already do.
  */
 export async function waitForDataReady(page: Page, timeoutMs: number): Promise<boolean> {
-  return page
-    .waitForFunction(
-      () => {
+  const deadline = Date.now() + timeoutMs;
+  let lastRows = -1;
+  let stableSamples = 0;
+  const STABLE_NEEDED = 2; // consecutive equal samples (~POLL_MS apart) → the fetch/render has settled
+  const POLL_MS = 2000;
+  // Poll REAL state — the <app-loader> spinner is gone AND the DATA-row count has stopped growing —
+  // rather than firing on the first row. That way Save waits until the data has fully ARRIVED, not
+  // just started, so a slow/heavy table can't be exported half-loaded. (A row-count poll, because
+  // there is no "render finished" event to await — this is state-driven, not a blind sleep.)
+  while (Date.now() < deadline) {
+    const s = await page
+      .evaluate(() => {
         const loaderVisible = Array.from(document.querySelectorAll('app-loader')).some((l) => l.getClientRects().length > 0);
-        const rows = document.querySelectorAll('.mat-mdc-row, mat-row, tbody tr, .mat-mdc-header-cell, [role="row"]').length;
-        return !loaderVisible && rows > 0;
-      },
-      { timeout: timeoutMs },
-    )
-    .then(() => true)
-    .catch(() => false);
+        const rows = document.querySelectorAll('.mat-mdc-row, mat-row, tbody tr').length; // DATA rows only (not header)
+        return { loaderVisible, rows };
+      })
+      .catch(() => null);
+    if (s && !s.loaderVisible && s.rows > 0) {
+      if (s.rows === lastRows) {
+        stableSamples += 1;
+        if (stableSamples >= STABLE_NEEDED) return true; // loader gone AND the row count has settled
+      } else {
+        stableSamples = 0;
+        lastRows = s.rows;
+      }
+    } else {
+      stableSamples = 0;
+      lastRows = s ? s.rows : -1;
+    }
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  return false;
 }
 
 /**

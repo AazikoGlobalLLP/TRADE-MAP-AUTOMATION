@@ -114,7 +114,21 @@ export async function runCountry(
   // the heavy product table (esp. NTL) may still be rendering — and Save before the rows exist yields
   // NO download (confirmed live 2026-08-19). Tunable via download.dataReadyTimeoutMs. On timeout we
   // still attempt Save (no worse than before) but record it so a no-download is explained.
-  const dataReady = await waitForDataReady(page, config.download.dataReadyTimeoutMs ?? DEFAULT_DATA_READY_TIMEOUT_MS);
+  const dataReadyTimeout = config.download.dataReadyTimeoutMs ?? DEFAULT_DATA_READY_TIMEOUT_MS;
+  let dataReady = await waitForDataReady(page, dataReadyTimeout);
+
+  // If the data never appeared, a mid-run SESSION EXPIRY (login redirect during load) is the likely
+  // cause. Detect the LOGIN PAGE and PAUSE for a manual re-login + re-navigate (PRD §28) — never fail
+  // the country on a recoverable auth bounce — then re-verify the query and wait once more. If login
+  // is abandoned, gotoAuthenticated throws LOGIN_REQUIRED, which the batch turns into a resume-able stop.
+  if (!dataReady && (await isLoginPage(page).catch(() => false))) {
+    log('warn', 'auth.login_midrun', { country, url: page.url() });
+    await gotoAuthenticated(page, url, config.auth?.maxLoginAttempts ?? 3, log);
+    await verifyCountryHeading(page, country);
+    await ensureAllFilters(page, config.filters, log);
+    await verifyQuery(page, country, config.filters, { start: requestedStart, end: requestedEnd }, log);
+    dataReady = await waitForDataReady(page, dataReadyTimeout);
+  }
   log(dataReady ? 'info' : 'warn', dataReady ? 'data.ready' : 'data.not_ready', {
     country,
     ...(dataReady ? {} : { note: 'data table did not render before Save; attempting Save anyway' }),

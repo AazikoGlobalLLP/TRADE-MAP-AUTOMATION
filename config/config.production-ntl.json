@@ -1,5 +1,5 @@
 {
-  "_note": "PRODUCTION config for the full 204-country byProduct NTL export. Run: npm run batch -- --config config/config.production-ntl.json  (see docs/FRIEND_SETUP_GUIDE.md). byProduct + Detail=NTL + source=direct (Mirror is disabled for byProduct). Full list = countries-full.xlsx (204). Randomized anti-block throttle (break after a random 1-5 countries for a random 2-7 min). NTL tables are heavy: dataReadyTimeoutMs=15min, download timeoutMs=10min. Own resume manifest so it never clashes with a byPartner run; re-running the SAME command resumes where it left off.",
+  "_note": "PRODUCTION config for the full 204-country byProduct NTL export. Run: npm run batch -- --config config/config.production-ntl.json  (see docs/FRIEND_SETUP_GUIDE.md). To retry only the failures: add --retry-failed. byProduct + Detail=NTL + source=direct (Mirror is disabled for byProduct). Full list = countries-full.xlsx (204). Randomized anti-block throttle: break after a random 2-6 countries for a random 45s-2.5min (reduced from 1-5/2-7min to shrink the gaps; if the account gets blocked, raise throttlePauseMin/MaxMs again). NTL tables are heavy: dataReadyTimeoutMs=15min, download timeoutMs=10min. Own resume manifest; re-running the SAME command resumes where it left off.",
   "tradeMapBaseUrl": "https://www.trademap.org",
   "outputDirectory": "./output",
   "browserProfileDir": "./browser-profile",
@@ -45,10 +45,10 @@
     "retryDelayMs": 2000,
     "continueOnFailure": true,
     "evidenceDir": "./screenshots/failures",
-    "throttleEveryMin": 1,
-    "throttleEveryMax": 5,
-    "throttlePauseMinMs": 120000,
-    "throttlePauseMaxMs": 420000
+    "throttleEveryMin": 2,
+    "throttleEveryMax": 6,
+    "throttlePauseMinMs": 45000,
+    "throttlePauseMaxMs": 150000
   },
 
   "manifestFile": "./manifests/latest-run-ntl.json",

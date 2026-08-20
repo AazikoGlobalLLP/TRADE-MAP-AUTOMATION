@@ -6,6 +6,7 @@ import { loadConfig } from './config/loadConfig';
 import { RequestedRange } from './trademap/rangeEngine';
 import { runCountry, Logger } from './orchestrator/runCountry';
 import { readCountries } from './input/readCountries';
+import { loadManifest, failedCountries } from './manifest/manifest';
 import { runBatch, renderSummaryTable } from './orchestrator/runBatch';
 import { writeRunReport } from './report/runReport';
 import { confirmProceed, collectRunPlan, createStdinAsk } from './cli/prompt';
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   const batchMode = hasFlag('batch');
   const interactive = process.argv.includes('--interactive') || process.argv.includes('-i'); // Phase 8
   const force = hasFlag('force'); // Phase 5 (§36): ignore the resume manifest + overwrite existing files
+  const retryFailed = hasFlag('retry-failed'); // Phase 9B: re-run ONLY the manifest's FAILED countries
   const country = getArg('country') ?? 'Dominica';
   const runId = getArg('run-id') ?? new Date().toISOString().replace(/[:.]/g, '-');
   const configPath = getArg('config') ?? path.resolve('config/config.json');
@@ -170,7 +172,30 @@ async function main(): Promise<void> {
   // In batch mode, read + normalise the ordered country list BEFORE launching the
   // browser, so a bad/empty input file fails fast (exit 2) without a browser.
   const inputFile = getArg('countries') ?? config.batch.inputFile;
-  const countries = batchMode ? await readCountries(path.resolve(inputFile), log) : [];
+  let countries = batchMode ? await readCountries(path.resolve(inputFile), log) : [];
+
+  // Phase 9B: `--retry-failed` narrows the run to ONLY the countries the manifest recorded as FAILED,
+  // so a re-run touches just those (no re-validating every large SUCCESS workbook). Resumes normally
+  // otherwise. Requires a manifest; an empty result is a clean exit-0 "nothing to retry".
+  if (batchMode && retryFailed) {
+    if (!config.manifestFile) {
+      process.stderr.write('RETRY_FAILED_NO_MANIFEST: --retry-failed needs a manifestFile in the config.\n');
+      process.exitCode = 2;
+      return;
+    }
+    const requestedRange = `${global.requestedStart}-${global.requestedEnd}`;
+    const manifest = loadManifest(path.resolve(config.manifestFile), runId, requestedRange, new Date().toISOString());
+    const failedSet = new Set(failedCountries(manifest).map((c) => c.trim().toLowerCase()));
+    const fromInput = countries.length;
+    countries = countries.filter((c) => failedSet.has(c.trim().toLowerCase()));
+    log('info', 'batch.retry_failed', { failedInManifest: failedSet.size, willRetry: countries.length, ofInput: fromInput });
+    if (countries.length === 0) {
+      process.stdout.write('\nNo FAILED countries in the manifest to retry — nothing to do.\n');
+      process.exitCode = 0;
+      return;
+    }
+    process.stdout.write(`\nRetrying ${countries.length} FAILED countries only.\n`);
+  }
 
   const { context, page } = await launchSession(config.browserProfileDir, config.tradeMapBaseUrl);
   try {

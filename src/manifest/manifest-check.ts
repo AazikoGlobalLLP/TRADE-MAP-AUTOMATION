@@ -10,6 +10,7 @@ import { runBatch, BatchDeps } from '../orchestrator/runBatch';
 import {
   emptyManifest,
   findEntry,
+  failedCountries,
   upsertEntry,
   loadManifest,
   writeManifest,
@@ -371,6 +372,22 @@ void (async () => {
     assert.deepEqual(ran, ['China']); // ran despite the seed — manifest off
     assert.equal(writes.length, 0); // nothing persisted
     assert.equal(s.success, 1);
+  });
+
+  // -------------------------------------------------------------------------
+  await check('failedCountries returns only FAILED entries, in order (drives --retry-failed)', () => {
+    let m = emptyManifest('R1', RANGE, 'T0');
+    m = upsertEntry(m, successEntry('India'));
+    m = upsertEntry(m, { ...successEntry('Pakistan'), status: 'FAILED', error: 'DOWNLOAD_TIMEOUT', attempts: 3 });
+    m = upsertEntry(m, successEntry('China'));
+    m = upsertEntry(m, { ...successEntry('Nepal'), status: 'FAILED', error: 'QUERY_INVALID', attempts: 3 });
+    assert.deepEqual(failedCountries(m), ['Pakistan', 'Nepal']);
+  });
+
+  await check('failedCountries is empty when nothing failed', () => {
+    let m = emptyManifest('R1', RANGE, 'T0');
+    m = upsertEntry(m, successEntry('India'));
+    assert.deepEqual(failedCountries(m), []);
   });
 
   // -------------------------------------------------------------------------
