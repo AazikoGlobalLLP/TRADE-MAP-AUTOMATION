@@ -180,12 +180,26 @@ export async function detectEffectiveRange(
  * download event and click Save concurrently; if Save opens a format menu, we pick XLSX.
  * VERIFY the Save/XLSX selectors against the live DOM.
  */
-export async function triggerSaveAndDownload(page: Page, timeoutMs: number): Promise<Download> {
-  const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: timeoutMs }),
-    clickSave(page),
-  ]);
-  return download;
+export async function triggerSaveAndDownload(
+  page: Page,
+  timeoutMs: number,
+  onTick?: (elapsedMs: number) => void,
+): Promise<Download> {
+  // Save makes Trade Map generate the FULL export server-side (thousands of rows × ~250 month
+  // columns for a big country), and the `download` event only fires once that finishes — which can
+  // take minutes with NO feedback. An optional heartbeat lets the caller show "still exporting… Xs"
+  // so a slow big-country export is not mistaken for a hang. The timer never affects the result.
+  const start = Date.now();
+  const ticker = onTick ? setInterval(() => onTick(Date.now() - start), 15000) : undefined;
+  try {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: timeoutMs }),
+      clickSave(page),
+    ]);
+    return download;
+  } finally {
+    if (ticker) clearInterval(ticker);
+  }
 }
 
 async function clickSave(page: Page): Promise<void> {
@@ -225,10 +239,17 @@ export const DEFAULT_DATA_READY_TIMEOUT_MS = 300000; // 5 min — generous for h
  * false on timeout (the caller may still attempt Save — no worse than before). waitForFunction runs
  * in the browser, so this MUST run compiled (CLAUDE.md `__name` gotcha) — export/calibrate already do.
  */
-export async function waitForDataReady(page: Page, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
+export async function waitForDataReady(
+  page: Page,
+  timeoutMs: number,
+  onTick?: (info: { elapsedMs: number; rows: number }) => void,
+): Promise<boolean> {
+  const start = Date.now();
+  const deadline = start + timeoutMs;
   let lastRows = -1;
   let stableSamples = 0;
+  let lastTickMs = 0;
+  const TICK_EVERY_MS = 15000; // heartbeat cadence so a slow load shows progress instead of silence
   const STABLE_NEEDED = 2; // consecutive equal samples (~POLL_MS apart) → the fetch/render has settled
   const POLL_MS = 2000;
   // Poll REAL state — the <app-loader> spinner is gone AND the DATA-row count has stopped growing —
@@ -243,6 +264,14 @@ export async function waitForDataReady(page: Page, timeoutMs: number): Promise<b
         return { loaderVisible, rows };
       })
       .catch(() => null);
+    // Heartbeat (throttled): report elapsed + current row count so a long load is visible.
+    if (onTick) {
+      const elapsed = Date.now() - start;
+      if (elapsed - lastTickMs >= TICK_EVERY_MS) {
+        lastTickMs = elapsed;
+        onTick({ elapsedMs: elapsed, rows: s ? s.rows : 0 });
+      }
+    }
     if (s && !s.loaderVisible && s.rows > 0) {
       if (s.rows === lastRows) {
         stableSamples += 1;

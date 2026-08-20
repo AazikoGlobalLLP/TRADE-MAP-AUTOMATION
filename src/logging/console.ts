@@ -71,6 +71,17 @@ export function formatConsoleLine(level: LogLevel, event: string, data: Record<s
     case 'country.skip_resume':
       return `⏭️  ${country} — SKIPPED (already done)`;
 
+    case 'data.loading': {
+      const rows = num(data.rows) ?? 0;
+      return `   ⏳ ${country} — loading data… (${rows} rows, ${prettyDuration(num(data.elapsedMs) ?? 0)})`;
+    }
+
+    case 'export.saving':
+      return `   💾 ${country} — saving (big countries generate a large file, can take a few minutes)…`;
+
+    case 'export.waiting':
+      return `   ⏳ ${country} — still exporting… (${prettyDuration(num(data.elapsedMs) ?? 0)})`;
+
     case 'country.failed': {
       const attempts = num(data.attempts);
       const att = attempts ? ` after ${attempts} ${plural(attempts, 'attempt', 'attempts')}` : '';

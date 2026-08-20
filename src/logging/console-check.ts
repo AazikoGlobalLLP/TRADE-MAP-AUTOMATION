@@ -63,6 +63,28 @@ check('FAILED → ❌ + country + shortened error', () => {
   assert.match(line, /DOWNLOAD_TIMEOUT/);
 });
 
+check('data.loading → ⏳ + country + rows + elapsed (progress, not a hang)', () => {
+  const line = formatConsoleLine('info', 'data.loading', { country: 'China', rows: 13671, elapsedMs: 45000 })!;
+  assert.match(line, /⏳/);
+  assert.match(line, /China/);
+  assert.match(line, /13671 rows/);
+  assert.match(line, /45s/);
+});
+
+check('export.saving → 💾 + country + "few minutes" note', () => {
+  const line = formatConsoleLine('info', 'export.saving', { country: 'United States of America' })!;
+  assert.match(line, /💾/);
+  assert.match(line, /United States of America/);
+  assert.match(line, /minutes/i);
+});
+
+check('export.waiting → ⏳ + elapsed (still exporting, not frozen)', () => {
+  const line = formatConsoleLine('info', 'export.waiting', { country: 'India', attempt: 1, elapsedMs: 134000 })!;
+  assert.match(line, /⏳/);
+  assert.match(line, /India/);
+  assert.match(line, /2m14s/);
+});
+
 check('throttle → ⏸ + pretty duration + account note', () => {
   const line = formatConsoleLine('info', 'batch.throttle', { beforeCountry: 'Peru', pauseMs: 134000 })!;
   assert.match(line, /⏸/);

@@ -115,7 +115,10 @@ export async function runCountry(
   // NO download (confirmed live 2026-08-19). Tunable via download.dataReadyTimeoutMs. On timeout we
   // still attempt Save (no worse than before) but record it so a no-download is explained.
   const dataReadyTimeout = config.download.dataReadyTimeoutMs ?? DEFAULT_DATA_READY_TIMEOUT_MS;
-  let dataReady = await waitForDataReady(page, dataReadyTimeout);
+  // Heartbeat so a slow data load shows progress in the console instead of looking frozen.
+  const onLoadTick = (info: { elapsedMs: number; rows: number }): void =>
+    log('info', 'data.loading', { country, rows: info.rows, elapsedMs: info.elapsedMs });
+  let dataReady = await waitForDataReady(page, dataReadyTimeout, onLoadTick);
 
   // If the data never appeared, a mid-run SESSION EXPIRY (login redirect during load) is the likely
   // cause. Detect the LOGIN PAGE and PAUSE for a manual re-login + re-navigate (PRD §28) — never fail
@@ -127,7 +130,7 @@ export async function runCountry(
     await verifyCountryHeading(page, country);
     await ensureAllFilters(page, config.filters, log);
     await verifyQuery(page, country, config.filters, { start: requestedStart, end: requestedEnd }, log);
-    dataReady = await waitForDataReady(page, dataReadyTimeout);
+    dataReady = await waitForDataReady(page, dataReadyTimeout, onLoadTick);
   }
   log(dataReady ? 'info' : 'warn', dataReady ? 'data.ready' : 'data.not_ready', {
     country,
@@ -138,12 +141,17 @@ export async function runCountry(
   // the rendered/URL columns ALWAYS span the full requested range (months a country lacks
   // are padded with 0), so the truthful effective range must be read from the FILE, not the
   // DOM — hence we download before naming. (Pre-download collision skip returns in Phase 5.)
+  // Save generates the full export server-side (heavy for big countries) — announce it and heartbeat
+  // while waiting for the download, so a multi-minute export reads as progress, not a hang.
+  log('info', 'export.saving', { country });
   let download;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= config.download.downloadAttempts; attempt++) {
     try {
       log('info', 'export.attempt', { country, attempt });
-      download = await triggerSaveAndDownload(page, config.download.timeoutMs);
+      download = await triggerSaveAndDownload(page, config.download.timeoutMs, (elapsedMs) =>
+        log('info', 'export.waiting', { country, attempt, elapsedMs }),
+      );
       break;
     } catch (e) {
       lastErr = e;
