@@ -17,34 +17,32 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 7 — Full 204-country production + acceptance | ✅ DONE — 204/204 SUCCESS, verified (input==manifest==disk, ranges vary, workbooks open) 2026-08-17 |
 | 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
 | 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (19 rows) + built; `test:runplan` 19/19, tsc clean. **By-exporter works LIVE** (imports 4/4 proven); by-product errors (uncalibrated → Phase 9). Detail/NTL prompt added |
-| 9 — Live-DOM-driven + anti-block redesign | 🟨 OFFLINE SLICE BUILT 2026-08-19 — build-time spec-lock (rows 28–29): **randomized throttle** (break after a random 1–5 countries for a random 2–7 min, re-drawn each break), **NTL token captured = `10`** (NTL exports; uncaptured levels hard-error). byProduct URL builder+parser (reproduces the real URL byte-for-byte), Detail tokens NTL/HS2/4/6, randomized anti-block throttle, Monthly-PRO warning all wired + tested (isolation 36, batch 26, runplan 20; tsc clean; adversarial review clean/fixed). **Still HEADED:** live-DOM questionnaire (row 20) + byProduct `readShownRange`/heading calibration |
+| 9 — byProduct live + anti-block + production NTL | ✅ byProduct PROVEN LIVE END-TO-END 2026-08-20 — HS6 (6,117 rows) + NTL (13,995 rows) real workbooks validated. byProduct accepts an explicit range + clamps it into the URL; `chooseGateRange` feeds the gate from the URL; `waitForDataReady` gates Save on the fetch; `optionsReader` calibrated to `app-single-picker`; detail-aware filenames; `--retry-failed`; production config + friend guide. Friend's full 204 run: **143 SUCCESS / 57 FAILED** → follow-up fixes shipped (mid-run login pause, row-settle wait, smaller throttle). tsc clean; isolation 44 / batch 26 / manifest 26 / report 8 / runplan 20. **OPEN:** diagnose the 57 failures + the ~7-row/1-month data gap (needs the friend's files/logs) |
 
 ## Now
-**Phase 9 offline slice is BUILT (spec rows 28–29 locked with the user 2026-08-19).** The byProduct query is wired by
-URL: `buildCanonicalUrl` inserts the `{detail}` segment (`…/byProduct/{freq}/{range}/{detail}/{source}/…`),
-`parseFiltersFromUrl` skips it so the query gate reads the right positions. Detail tokens are all from REAL captured
-URLs: **NTL=`10`** (the user's real India URL — NTL now exports), HS2/HS4/HS6 = `2`/`4`/`6`; any uncaptured level
-hard-errors (never invented/substituted). The **randomized anti-block throttle** takes a break after a random **1–5
-countries** that ran, for a random **2–7 min**, both re-drawn each break (`batch.throttleEvery{Min,Max}` /
-`throttlePause{Min,Max}Ms`; RNG injected; pause taken BEFORE the next run so resume-skips/last-country never waste a
-pause; `throttleEveryMax=0` disables). Monthly warning says **PRO-locked**. Green: isolation 36, batch 26, runplan 20
-(manifest 24 / report 8 unchanged), tsc clean; adversarial multi-agent review clean (3 throttle findings fixed).
-Committed on `phase-1-poc`; **not yet pushed**.
+**byProduct exports are PROVEN LIVE, end-to-end (2026-08-20).** A headed India run produced real workbooks for both
+**HS6** (6,117 rows) and **NTL** (13,995 tariff-line rows), range `200704-202605` read from the file. Live findings are
+wired: byProduct accepts an explicit range and clamps it into the URL (`chooseGateRange` feeds the pre-Save gate from
+the URL for byProduct, the DOM for byPartner); `waitForDataReady` gates Save on the data fetch (loader gone + rows
+settled — the export is server-side); `optionsReader` is calibrated to the custom `<app-single-picker>` controls;
+filenames carry the Detail level (NTL/HS6). The **production config** `config/config.production-ntl.json` (204 countries,
+byProduct NTL, randomized throttle, resume manifest) + a **word-by-word friend guide** (`docs/FRIEND_SETUP_GUIDE.md`)
+are committed. Green: isolation 44 / batch 26 / manifest 26 / report 8 / runplan 20, tsc clean. On `phase-1-poc`; **not pushed**.
 
-**Still HEADED (needs the user's live session, NOT built):** the live-DOM re-analyse-after-each-answer questionnaire
-(row 20), and the byProduct `readShownRange`/heading calibration. byProduct export (HS6 + NTL) is wired by URL but
-unverified end-to-end live.
+**Open from the friend's full 204-country run (143 SUCCESS / 57 FAILED):** the 57 failures' root cause is UNKNOWN
+(need `manifests/run-report-ntl.xlsx` + logs), and a manual-vs-automated file differs by **~7 rows + 1 month** (likely
+data-timing, since the export is server-side — needs BOTH files to confirm). Follow-up fixes already shipped:
+`--retry-failed`, mid-run login pause, row-settle wait, smaller throttle (2-6 / 45s-2.5min).
 
 ## Next 3
-1. **#1 — HEADED calibration session (the user's).** With a logged-in browser, run a byProduct export and confirm it
-   works end-to-end: does Trade Map accept the explicit `YYYYMM-YYYYMM` range or only the literal `default`? Do
-   `readShownRange`/heading read the byProduct data table? Also pin the `optionsReader` overlay selectors so Data
-   source/type/Currency read live, not the fallback lists.
-2. **Verify the randomized throttle on a real longer run** — confirm the 1–5 country / 2–7 min random breaks actually
-   stop the account blocking; adjust the `throttle*` bounds in config only (no code) if blocking persists. Monthly is
-   PRO-locked — don't hammer it.
-3. **Push a properly-named branch + PR** (carries Phases 1–9 offline): e.g.
-   `git checkout -b phase-9-byproduct-throttle` then `git push -u origin phase-9-byproduct-throttle`.
+1. **Diagnose the friend's run.** Read the 57 failure reasons (run report + newest `logs/runs/*.log`) and **diff the two
+   workbooks** (manual vs automated, same country) to confirm/deny the data gap. Then pin `isLoginPage` to the real
+   login/session-expiry URL once captured.
+2. **Re-run only the failures on the friend's PC** — first get the UPDATED code there (fresh `git bundle` / re-copy; no
+   remote), then `npm run batch -- --config config/config.production-ntl.json --retry-failed`. If failures were blocking,
+   RAISE `throttlePause{Min,Max}Ms` (don't shrink further).
+3. **Push a properly-named branch + PR** (carries Phases 1–9): e.g.
+   `git checkout -b phase-9-byproduct-ntl` then `git push -u origin phase-9-byproduct-ntl`.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress

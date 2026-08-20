@@ -1,47 +1,60 @@
-# HANDOFF — Trade Map Automated Export System — Phase 9 (offline slice) — 2026-08-19
+# HANDOFF — Trade Map Automated Export System — Phase 9 — 2026-08-20
 
 ## Done
-- **byProduct (View by = Product) is wired by URL and verified against ground truth.** `buildCanonicalUrl`
-  inserts the `{detail}` segment (`…/byProduct/{freq}/{range}/{detail}/{source}/…`) and `parseFiltersFromUrl`
-  skips it, so the pre-Save query gate reads source/dataType/currency from the correct positions. A test
-  reproduces the user's REAL India URL byte-for-byte.
-- **Detail tokens are all from real captured URLs, never invented:** NTL=`10` (captured 2026-08-19 from the
-  user's real India `c/699` imports byProduct URL), HS2=`2`, HS4=`4`, HS6=`6`. NTL now EXPORTS. Any still-uncaptured
-  level (e.g. HS8) hard-errors `DETAIL_TOKEN_UNCAPTURED` — never invented, never substituted.
-- **Randomized anti-block throttle:** `runBatch` takes a break after a random **1–5 countries** that ran, for a
-  random **2–7 min**, both re-drawn every break. Pause is taken BEFORE the next run, so resume-skips never waste a
-  pause and none trails the last country. `throttleEveryMax=0` disables; RNG injected for deterministic tests.
-- **Monthly** warning now says PRO-locked (row 24).
-- Offline green: `tsc` clean; isolation 36, batch 26, runplan 20, manifest 24, report 8 (114 total, 0 failed).
-- **Adversarial multi-agent review** (8 agents): byProduct URL / parser / NTL-never-invent dimensions clean; 3
-  throttle findings (vacuous last-country test + wasted trailing pauses on resume) all fixed by the randomized redesign.
+- **byProduct (View by = Product) exports work END-TO-END, LIVE-VALIDATED** with real workbooks:
+  - **HS6:** India → 6,117 product rows × 230 monthly cols, range `200704-202605`, real values.
+  - **NTL:** India → 13,995 tariff-line rows (real 8-digit codes, e.g. 29415000), range `200704-202605`.
+- **Q1 answered live:** byProduct **accepts an explicit `YYYYMM-YYYYMM` range and CLAMPS it to availability**,
+  writing the clamped window into the URL (`200001-202606` → `200704-202605`). `buildCanonicalUrl` needs no
+  change; no `default` required. (This is the OPPOSITE of byPartner, whose URL keeps the requested range.)
+- **Q2 answered:** `readShownRange` does NOT serve byProduct (the heavy NTL table doesn't render), but the URL
+  carries the true clamped range → new `chooseGateRange(viewBy)` feeds the pre-Save gate from the **URL** for
+  byProduct, the **DOM** for byPartner. Save now **waits for data-ready** (loader gone + rows settled) first.
+- **Q3 answered:** the advanced controls are custom `<app-single-picker>` (`.label` + `.form-container`
+  `cdkoverlayorigin`; overlay rows `.options-modal .option span.text`). `optionsReader` calibrated to them.
+- **Filenames carry the Detail level** (NTL/HS6) so an HS6 file and an NTL file never overwrite each other.
+- **Production config** `config/config.production-ntl.json` (204 countries, byProduct NTL, randomized throttle,
+  own resume manifest) + a **word-by-word friend setup guide** (`docs/FRIEND_SETUP_GUIDE.md`).
+- **Friend ran the full 204 batch: 143 SUCCESS / 57 FAILED.** Follow-up fixes shipped (see below).
+- Offline green: `tsc` clean; **isolation 44 / batch 26 / manifest 26 / report 8 / runplan 20**, 0 failed.
 
 ## Files changed (this session)
-- `src/trademap/driver.ts` — byProduct branch in `buildCanonicalUrl`; `resolveDetailUrlToken` (NTL=10/HS2/4/6, else throws).
-- `src/trademap/filters.ts` — `parseFiltersFromUrl` skips the byProduct `{detail}` segment.
-- `src/orchestrator/runBatch.ts` — randomized throttle (injectable `random`, pause-before-run, burst re-drawn each break).
-- `src/config/schema.ts` — `FiltersConfig.detail` optional; `batch.throttleEvery{Min,Max}` + `throttlePause{Min,Max}Ms` + validation.
-- `config/config.json` — throttle bounds 1/5 countries, 120000/420000 ms.
-- `src/config/runPlan.ts` — thread `answers.detail` into effective filters; Detail fallback `['NTL','HS6']`.
-- `src/cli/prompt.ts` — Monthly PRO warning; `src/orchestrator/retry.ts` — `DETAIL_*` fatal markers.
-- `src/index.ts` — byProduct/NTL pre-flight before any browser export; exit-2 classification.
-- Tests: `isolation-check.ts` (byProduct URL + NTL=10 ground truth), `batch-check.ts` (randomized throttle), `runplan-check.ts` (detail thread).
-- Docs: `docs/spec/phase-8-*` (rows 25–29), `docs/DECISIONS.md`, `docs/PHASES.md`, `CLAUDE.md`, `docs/STATUS.md`.
+- `src/tools/calibrate-byproduct.ts` — NEW read-only byProduct calibration probe (navigates the real built URL; dumps range/heading/overlays).
+- `src/trademap/rangeEngine.ts` — `chooseGateRange(viewBy, dom, url)`: byProduct→URL, byPartner→DOM.
+- `src/trademap/verifyQuery.ts` — the pre-Save gate reads the range via `chooseGateRange`.
+- `src/trademap/driver.ts` — `waitForDataReady` (loader-gone **and** DATA-row count settled before Save).
+- `src/trademap/optionsReader.ts` — calibrated to `app-single-picker` / `.options-modal .option span.text`.
+- `src/orchestrator/runCountry.ts` — `waitForDataReady` before Save + **mid-country login pause/recover**.
+- `src/config/schema.ts` — `download.dataReadyTimeoutMs`.
+- `src/files/filename.ts` — `{detailWord}` token (NTL/HS6/HS4/HS2 or AllProducts).
+- `src/manifest/manifest.ts` — `failedCountries()`; `src/index.ts` — `--retry-failed`.
+- `src/auth/session.ts` — `isLoginPage` also matches `connexion` (FR login).
+- `config/config.json` — filename template uses `{detailWord}`; `config/config.production-ntl.json` — NEW.
+- `docs/FRIEND_SETUP_GUIDE.md` — NEW. Tests updated: isolation (+8), manifest (+2), runplan (deepEqual).
 
 ## Decisions made
-- Randomized throttle (1–5 countries / 2–7 min, re-drawn each break; pause-before-run) supersedes the fixed N=5/M=120s.
-- NTL byProduct token = `10`, captured from a real URL + user-confirmed (not assumed — `10` is opaque vs HS2/4/6).
-- byProduct range emitted explicitly as `YYYYMM-YYYYMM` (consistent with byPartner); whether the site requires the
-  literal `default` is a HEADED follow-up (never emitted speculatively).
+- byProduct **clamps the requested range into the URL** (byPartner lies) → gate trusts the URL for byProduct.
+- The byProduct **export is server-side** (the file holds the full dataset, not a screen scrape) → Save must
+  wait for the FETCH to finish (loader gone + rows settled), not for a full DOM render.
+- **NTL is mandatory and works** (heavy — relies on the 15-min data-ready wait). Detail goes in the filename.
+- `--retry-failed` re-runs only the manifest's FAILED countries (skips re-validating every large SUCCESS file).
 
 ## Known broken / deliberately skipped
-- **byProduct execution is UNVERIFIED end-to-end live** — the URL builds correctly, but `readShownRange`/heading were
-  calibrated only for byPartner, and it is unknown whether the site accepts an explicit range or only `default`. HEADED task.
-- **`optionsReader` overlay selectors UNCALIBRATED** — Data source/type/Currency prompts still show fallback lists + log `options.fallback`.
-- **Live-DOM re-analyse-after-each-answer questionnaire (row 20) NOT built** — needs the user's headed session.
-- **Not pushed** — everything committed locally on `phase-1-poc` (holds Phases 1–9 offline). Push a properly-named branch before a PR.
+- **DATA COMPLETENESS unconfirmed:** friend's manual vs automated file differ by **~7 rows + 1 month**. Most
+  likely data-timing (downloaded at different times; the export is server-side) but UNVERIFIED — needs BOTH
+  files to diff. The row-settle wait is the mitigation if it turns out to be a real truncation.
+- **57/204 FAILED** on the friend's run — root cause UNKNOWN (need `manifests/run-report-ntl.xlsx` + the newest
+  `logs/runs/*.log`). Could be session expiry (now mid-run-paused), heavy-table timeout, or blocking.
+- **Real login/session-expiry URL UNCAPTURED** — `isLoginPage` matches login/signin/logon/connexion + password
+  field + "gateway to itc"; add the friend's actual URL once captured.
+- **Friend's PC has the OLD code** — must get the updated repo (fresh `git bundle` / re-copy) or the fixes don't apply.
+- **Throwaway test configs** `config/config.byproduct-test.json`, `config/config.byproduct-hs6-test.json` are
+  UNCOMMITTED (delete when done).
+- **NOT pushed** — committed locally on `phase-1-poc` (no git remote configured). Push a named branch for a PR.
 
 ## Next session starts here
-- Phase 9 (headed): run ONE byProduct export live and calibrate — does Trade Map accept the explicit range or only `default`? do `readShownRange`/heading read the byProduct table? then pin the `optionsReader` selectors.
-- First command: `npm run export:interactive` — choose View by = Product, Detail = HS6 (or NTL), and watch the query gate + the served range.
-- Watch out for: **do NOT re-run the full 204 export to "check"** (accounts block) — one country is enough to calibrate; and the interactive headed run is the USER's to run (a tool shell has no stdin and will hang the browser).
+- Diagnose the friend's run: read the 57 failure reasons + **diff the two workbooks** for the data gap, then
+  pin `isLoginPage` to the real login URL. Get the updated code onto the friend's PC first.
+- First command (friend's PC, after updating code): `npm run batch -- --config config/config.production-ntl.json --retry-failed`
+- Watch out for: if the 57 failures were **blocking**, do NOT shrink the throttle further — RAISE
+  `throttlePause{Min,Max}Ms`; and the friend MUST update the code before re-running or none of the fixes apply.

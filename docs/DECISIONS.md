@@ -308,3 +308,24 @@ Format: date · decision · why · alternative rejected.
   tokens HS2/HS4/HS6 = `2`/`4`/`6` (captured); NTL uncaptured. The frozen YYYYMM-YYYYMM range is emitted explicitly (consistent
   with byPartner); the user's captured URL used the literal `default` there — whether byProduct requires `default` is a HEADED
   calibration follow-up. Rejected: emitting `default` speculatively / inventing the NTL token.
+- **2026-08-20 · Phase 9B (live) · byProduct accepts an explicit range and CLAMPS it into the URL.** Why: a headed run navigated to
+  the built URL `.../byProduct/month/200001-202606/10/...` and the site rewrote it to `.../200704-202605/...` (India's real
+  availability), matching the Time-range control. So the explicit YYYYMM-YYYYMM is honoured (no `default` needed) AND, unlike byPartner
+  (URL keeps the requested range, pads with 0), byProduct's URL is a TRUTHFUL effective-range source. Follow-up: chooseGateRange.
+- **2026-08-20 · Phase 9B (live) · chooseGateRange(viewBy) — the pre-Save gate's range source is per-view.** Why: readShownRange
+  returns null for byProduct (heavy NTL table doesn't render), which would falsely block Save. byPartner->DOM (its URL lies),
+  byProduct->URL (clamped + table too heavy). Wired into verifyQuery. Rejected: a blanket DOM-or-URL fallback (would let a byPartner
+  country pass the gate on its lying URL if the DOM ever failed to render).
+- **2026-08-20 · Phase 9B (live) · Save must WAIT FOR DATA before firing; the byProduct export is server-side.** Why: an NTL Save fired
+  ~30s after navigate (table still spinning) -> NO download. The URL-range gate removed byPartner's implicit "data loaded" guarantee.
+  Fix: waitForDataReady (no visible <app-loader> AND the DATA-row count stopped growing) before Save, tunable via
+  download.dataReadyTimeoutMs (NTL uses 15min). The file holds the FULL dataset (6,117 HS6 / 13,995 NTL rows) -> server-side export;
+  the DOM is only a readiness gate.
+- **2026-08-20 · Phase 9B (live) · Q3: advanced controls are <app-single-picker>, NOT mat-select.** Why: captured live — Data
+  source/type/Currency/Detail each = app-single-picker with label in `.label`, a `.form-container` cdkoverlayorigin trigger, and a CDK
+  overlay `.options-modal` whose rows are `.option > .text-container > span.text` (.selected/.disabled). optionsReader reads that.
+  Note: Mirror is DISABLED for byProduct (only Direct), so production uses source=direct.
+- **2026-08-20 · Phase 9B · Filenames carry the Detail level; --retry-failed re-runs only failures.** Why: the NTL run overwrote the
+  HS6 file (identical name). deriveFlowTokens now emits {detailWord} (NTL/HS6/... or AllProducts); config.json + the production template
+  use it. After a 204-run left 57 FAILED, --retry-failed runs ONLY the manifest's FAILED countries (avoids re-validating ~143 large
+  SUCCESS workbooks). Production throttle reduced 1-5/2-7min -> 2-6 countries / 45s-2.5min (user: gaps too big).

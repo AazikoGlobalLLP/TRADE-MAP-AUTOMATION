@@ -64,7 +64,7 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
   the export "just to check" (it re-downloads all 204). Acceptance = input count == manifest entries
   == files on disk, every SUCCESS→existing non-zero file, effective ranges vary (isolation held).
 - **View by = Product (byProduct)** is a DIFFERENT URL shape from byPartner. As of Phase 9 (2026-08-19) it is
-  URL-WIRED but NOT yet verified end-to-end live. Real byProduct URL (confirmed 2026-08-19):
+  PROVEN LIVE end-to-end 2026-08-20 (real HS6 6,117-row + NTL 13,995-row India workbooks, range 200704-202605). Real byProduct URL (confirmed 2026-08-19):
   `…/time-series/exports/c/000/c/000/p/ALL/byProduct/year/default/2/direct/values/USD/table` — it inserts a
   **Detail** segment between range and source (`…/byProduct/{freq}/{range}/{detail}/{source}/{dataType}/{currency}/{view}`);
   byPartner has none. `buildCanonicalUrl` (driver.ts) now branches on `viewBy=product` to insert it and
@@ -74,8 +74,23 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
   Any STILL-uncaptured level (e.g. HS8) → `resolveDetailUrlToken` HARD-ERRORS (`DETAIL_TOKEN_UNCAPTURED`), never
   invents/substitutes. To add one: capture its real URL, add the token to `DETAIL_URL_TOKENS`. Range is emitted
   explicitly as `YYYYMM-YYYYMM`; the captured URLs used the literal `default` (=MAX) too — whether byProduct requires
-  `default` is a HEADED follow-up. Detail default = NTL.
-  **STILL HEADED (uncalibrated):** the live-DOM questionnaire, and `readShownRange`/heading against the byProduct table.
+  `default` is CONFIRMED LIVE: byProduct HONOURS the explicit range and CLAMPS it to availability, writing the clamped window
+  INTO the URL (200001-202606 -> 200704-202605). So — OPPOSITE of byPartner (whose URL lies) — byProduct's URL is the
+  TRUTHFUL effective-range source: `readShownRange` returns null (the heavy NTL table barely renders) and
+  `chooseGateRange(viewBy)` (rangeEngine.ts) makes the pre-Save gate read the range from the URL for byProduct, the DOM
+  for byPartner. Detail default = NTL.
+  **CALIBRATED LIVE 2026-08-20 (no longer headed):**
+  - The byProduct EXPORT IS SERVER-SIDE (the file holds the full dataset, not a screen scrape), but Save yields NO
+    download unless the data has FETCHED first. `runCountry` calls `waitForDataReady` (no visible `<app-loader>` AND the
+    data-row count has stopped growing) before Save; timeout `download.dataReadyTimeoutMs` (NTL needs ~15 min). It is
+    also login-aware there: a login page mid-load PAUSES for a manual re-login instead of failing the country.
+  - Advanced controls (Data source/type/Currency/Detail) are custom `<app-single-picker>`, NOT mat-select: label in
+    `.label`, trigger `.form-container[cdkoverlayorigin]`, overlay `.options-modal .option > .text-container > span.text`
+    (`.selected`/`.disabled`). `optionsReader` reads that. **Mirror is DISABLED for byProduct — use `source=direct`.**
+  - Production NTL run: `npm run batch -- --config config/config.production-ntl.json` (204 countries; see
+    `docs/FRIEND_SETUP_GUIDE.md`). Re-run only failures: add `--retry-failed`. Filenames carry the Detail level
+    (`{detailWord}` = NTL/HS6/...) so HS6 and NTL files never collide. Read-only calibration probe:
+    `npm run calibrate:byproduct`.
 - **Monthly frequency is PRO-locked** (the beta shows "Monthly 🔒PRO"). The Monthly signal is "needs a PRO account",
   not just "needs login". Yearly/Quarterly are free.
 - **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out. The

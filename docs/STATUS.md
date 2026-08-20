@@ -1,15 +1,16 @@
 # Status — Trade Map Automated Export System
 
-**Updated:** 2026-08-19
+**Updated:** 2026-08-20
 
-**Working on right now:** Getting the tool ready to also download the "by product" view of the trade data, and adding polite, randomised pauses so the account stops getting blocked during long runs.
+**Working on right now:** Making the detailed "by product" trade-data download work reliably across all 204 countries, and fixing the issues that showed up on the first full run.
 
 **Done this week:**
-- The tool can now build the correct web address for the "by product" reports (previously it only handled the "by exporter" view).
-- Wired up the "NTL" (most-detailed) product level using a real example you supplied, so it downloads instead of stopping.
-- Added human-like breaks: after every 1–5 countries the tool now pauses for a random 2–7 minutes, and the pattern keeps changing, so the site is less likely to flag the account.
-- An automated safety review checked the changes end to end; every issue it found was fixed, and all 114 automated checks pass.
+- The tool now downloads the "by product" reports for real — proven with actual India files at both the summary level and the most-detailed ("NTL") level, with the correct dates and full data.
+- Set up the complete 204-country automated run with polite, randomised pauses, and wrote a plain step-by-step guide so a colleague can run it on a fresh PC.
+- Ran the full 204-country batch: 143 downloaded successfully, 57 need a retry — added a simple "retry only the failed ones" option so we don't redo the 143 that worked.
+- Made the tool wait for each report to fully load before saving (so files aren't cut short), and pause for re-login if the session drops mid-run instead of failing that country.
+- Every downloaded file is now named with the country, date range, and detail level, so files never overwrite each other.
 
-**Blocked on:** Nothing to build — but the "by product" download needs one real test run in a logged-in browser to confirm the website accepts it (that run is yours to do, not the tool's, to avoid getting the account blocked).
+**Blocked on:** Two things from the colleague's PC to finish diagnosing — the list of which 57 countries failed and why, and one manual-vs-automated file pair to check a small reported data difference (about 7 rows and one month). The colleague also needs the latest version of the tool before re-running.
 
-**Next:** Do one logged-in "by product" test export to confirm it works live, then package this up for review.
+**Next:** Diagnose the 57 failures and the small data difference, then re-run just the failures on the updated tool.
