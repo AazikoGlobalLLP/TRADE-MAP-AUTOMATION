@@ -66,6 +66,10 @@ function norm(v: string): string {
 // Reverse of driver.ts's forward maps: Trade Map URL token → our config vocabulary.
 const FREQ_FROM_URL: Record<string, string> = { month: 'monthly', quarter: 'quarterly', year: 'yearly' };
 const VIEWBY_FROM_URL: Record<string, string> = { bypartner: 'exporter', byproduct: 'product' };
+// URL token → data-type config word (reverse of driver's DATATYPE_URL). The URL uses the SINGULAR
+// `quantity`; config vocabulary is `quantities`, so map it back before comparing (confirmed live
+// 2026-08-20). Values is identity. Unmapped tokens pass through unchanged.
+const DATATYPE_FROM_URL: Record<string, string> = { quantity: 'quantities' };
 
 /**
  * PURE. Read the locked filters back from Trade Map's canonical URL — the deterministic
@@ -121,7 +125,7 @@ export function parseFiltersFromUrl(url: string, filters: FiltersConfig): Filter
   if (viewBy !== undefined) readout.viewBy = VIEWBY_FROM_URL[viewBy.toLowerCase()] ?? viewBy;
   if (freq !== undefined) readout.frequency = FREQ_FROM_URL[freq.toLowerCase()] ?? freq;
   if (source !== undefined) readout.source = source;
-  if (dataType !== undefined) readout.dataType = dataType;
+  if (dataType !== undefined) readout.dataType = DATATYPE_FROM_URL[dataType.toLowerCase()] ?? dataType;
   if (currency !== undefined) readout.currency = currency;
 
   return readout;

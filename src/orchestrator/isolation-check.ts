@@ -286,6 +286,20 @@ check('buildCanonicalUrl reproduces the real India byProduct/NTL URL exactly (to
   );
 });
 
+// GROUND TRUTH: real WORKING Lithuania byProduct/NTL QUANTITY URL, captured live 2026-08-20.
+// Confirms the Quantities data type uses the SINGULAR URL token `quantity` (config word `quantities`)
+// and currency `na` — the plural `quantities` in the URL left the page unselected ("Choose") + errored.
+check('buildCanonicalUrl reproduces the real Lithuania byProduct/NTL quantity URL exactly (quantities→quantity, na)', () => {
+  const qtyFilters: FiltersConfig = { ...PRODUCT_FILTERS, tradeFlow: 'imports', detail: 'NTL', dataType: 'quantities', currency: 'na' };
+  const url = buildCanonicalUrl('https://www.trademap.org', '440', qtyFilters, '200401', '202606');
+  assert.equal(
+    url,
+    'https://www.trademap.org/en/goods/time-series/imports/c/440/c/000/p/ALL/byProduct/month/200401-202606/10/direct/quantity/na/table',
+  );
+  // The pre-Save gate must read it back cleanly (quantity→quantities, na→na) — no FILTER_DRIFT.
+  assert.deepEqual(filterMismatches(expectedFilters(qtyFilters), parseFiltersFromUrl(url, qtyFilters)), []);
+});
+
 check('buildCanonicalUrl(byProduct, uncaptured Detail) still hard-errors — never invents a token', () => {
   assert.throws(
     () => buildCanonicalUrl('https://www.trademap.org', '842', { ...PRODUCT_FILTERS, detail: 'HS8' }, '200001', '202606'),

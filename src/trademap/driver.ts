@@ -29,6 +29,10 @@ export interface UrlFilters {
 // Trade Map URL vocabulary. Map config words → the tokens the site's URL uses.
 const FREQ_URL: Record<string, string> = { monthly: 'month', quarterly: 'quarter', yearly: 'year' };
 const VIEWBY_URL: Record<string, string> = { exporter: 'byPartner', product: 'byProduct' };
+// Data-type config word → URL token. Confirmed LIVE 2026-08-20 from a real working Lithuania URL
+// (…/direct/quantity/na/table): the "Quantities" data type's URL segment is the SINGULAR `quantity`.
+// Values is identity (no entry). An unmapped value passes through unchanged (never invented).
+const DATATYPE_URL: Record<string, string> = { quantities: 'quantity' };
 
 // Detail (product-detail granularity) URL tokens for the byProduct view (Phase 9, spec rows 21,27).
 // All decoded from REAL logged-in byProduct URLs — never invented (CLAUDE.md):
@@ -102,7 +106,8 @@ export function buildCanonicalUrl(
     }
     segments.push(resolveDetailUrlToken(filters.detail));
   }
-  segments.push(filters.source, filters.dataType, filters.currency, filters.view);
+  const dataTypeToken = DATATYPE_URL[filters.dataType] ?? filters.dataType;
+  segments.push(filters.source, dataTypeToken, filters.currency, filters.view);
   return segments.join('/');
 }
 
