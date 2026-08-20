@@ -41,9 +41,21 @@ the same command and it **continues where it left off** — it never re-download
 
 ## 2. Get the project onto the friend's PC
 
-The project is not on GitHub, so transfer it as a single file. **Pick ONE method.**
+**Pick ONE method.** Method A (clone from GitHub) is now the easiest.
 
-### Method A — git bundle (recommended, needs git on both PCs)
+### Method A — clone from GitHub (recommended, needs internet + git)
+
+The project now lives at **https://github.com/AazikoGlobalLLP/TRADE-MAP-AUTOMATION**. On the
+**friend's** PC, in a folder where they want the project (e.g. `C:\Work`):
+```
+> cd C:\Work
+> git clone https://github.com/AazikoGlobalLLP/TRADE-MAP-AUTOMATION.git
+> cd TRADE-MAP-AUTOMATION
+```
+To get later fixes, just `git pull` (then `npm install` and `npm run build`). This replaces the old
+"copy a bundle" step — everyone stays on the same, latest code.
+
+### Method B — git bundle (offline, needs git on both PCs)
 
 On **your** PC (the one that has the project), in the project folder:
 ```
@@ -58,7 +70,7 @@ On the **friend's** PC, in a folder where they want the project (e.g. `C:\Work`)
 > git checkout phase-1-poc
 ```
 
-### Method B — copy the folder (no git needed)
+### Method C — copy the folder (no git needed, fully offline)
 
 On **your** PC, make a copy of the project folder, then **delete these sub-folders from the copy** before
 zipping (they are large and rebuild automatically — never copy them):
