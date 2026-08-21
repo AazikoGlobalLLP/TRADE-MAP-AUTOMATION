@@ -17,6 +17,7 @@
     "calibrate:byproduct": "tsc && node dist/tools/calibrate-byproduct.js",
     "harvest": "tsc && node dist/tools/harvest-codes.js",
     "diff-xlsx": "tsc && node dist/tools/diff-xlsx.js",
+    "diagnose": "tsc && node dist/tools/collect-diagnostics.js",
     "test:isolation": "tsx src/orchestrator/isolation-check.ts",
     "test:batch": "tsx src/orchestrator/batch-check.ts",
     "test:manifest": "tsx src/manifest/manifest-check.ts",

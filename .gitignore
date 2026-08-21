@@ -17,6 +17,7 @@ output/
 logs/
 screenshots/
 manifests/
+diagnostics-report.txt
 
 # OS / editor
 Thumbs.db
