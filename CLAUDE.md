@@ -93,6 +93,20 @@ Greenfield: only the PRD exists today. First scaffolding lands in Phase 1.
     `npm run calibrate:byproduct`.
 - **Monthly frequency is PRO-locked** (the beta shows "Monthly 🔒PRO"). The Monthly signal is "needs a PRO account",
   not just "needs login". Yearly/Quarterly are free.
+- **Data-type URL tokens are NOT the config word (Phase 10, live-captured).** `Quantities` → SINGULAR `quantity` in the
+  URL + currency `na` (quantities have no money unit); `Values` → `values` + `USD`. Building the plural `quantities` leaves
+  the page's Data type on "Choose" + "Error loading time series". Handled by `DATATYPE_URL` (driver, build) +
+  `DATATYPE_FROM_URL` (filters, parse) — same pattern as freq/viewBy. Never invent a token; capture a real working URL.
+- **~45 "mirror-only" countries have NO Direct data (Phase 10, live).** Navigating `.../direct/...` for Syria, Moldova,
+  Vietnam, Bangladesh, Cuba, Bhutan, etc. REDIRECTS to `.../6/mirror/...` → the gate throws FILTER_DRIFT on `source`. Fix:
+  `source=mirror` + `detail=HS6` (mirror data exists only at HS6). Same 45 for both data types — see
+  `config/config.production-hs6-fallback.json` (quantities, na) and `config.production-hs6-mirror-values.json` (values, USD),
+  list `input/countries-no-ntl.xlsx`. This is NOT a mirror-bypass; mirror is the only data offered (the earlier
+  "mirror disabled for byProduct" note was a Direct-reporting country). Big Direct countries (USA, …) are the opposite: they
+  only needed the Save-click timeout raised 30s→3min (`SAVE_CLICK_TIMEOUT_MS`).
+- **Debugging another PC:** `npm run diagnose` writes one `diagnostics-report.txt` (git commit, manifest counts, newest log
+  tail — NO secrets) to send back. On a machine that never ran a data type, `--retry-failed` finds an empty manifest and
+  exits "nothing to do" — use the plain command for a fresh data type.
 - **Accounts get blocked if the site is hammered.** Do NOT re-run a full export to check; space runs out. The
   RANDOMIZED anti-block THROTTLE now exists (Phase 9): `runBatch` takes a break after a random
   `batch.throttleEveryMin..throttleEveryMax` (default 1–5) countries that ran, for a random

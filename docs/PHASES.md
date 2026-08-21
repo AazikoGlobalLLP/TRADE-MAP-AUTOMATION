@@ -18,31 +18,25 @@ Legend: **Demo** = the one observable thing that proves the phase is done.
 | 6 — Session-expiry + query gate + report | ✅ DONE — run-report.xlsx + explicit session-expiry pause/resume; headless report 8/8 + batch 22/22 + manifest 24/24 green 2026-08-18 |
 | 8 — Interactive dynamic query builder | 🟨 CODE COMPLETE 2026-08-18 — spec-locked (19 rows) + built; `test:runplan` 19/19, tsc clean. **By-exporter works LIVE** (imports 4/4 proven); by-product errors (uncalibrated → Phase 9). Detail/NTL prompt added |
 | 9 — byProduct live + anti-block + production NTL | ✅ byProduct PROVEN LIVE END-TO-END 2026-08-20 — HS6 (6,117 rows) + NTL (13,995 rows) real workbooks validated. byProduct accepts an explicit range + clamps it into the URL; `chooseGateRange` feeds the gate from the URL; `waitForDataReady` gates Save on the fetch; `optionsReader` calibrated to `app-single-picker`; detail-aware filenames; `--retry-failed`; production config + friend guide. Friend's full 204 run: **143 SUCCESS / 57 FAILED** → follow-up fixes shipped (mid-run login pause, row-settle wait, smaller throttle). tsc clean; isolation 44 / batch 26 / manifest 26 / report 8 / runplan 20. **OPEN:** diagnose the 57 failures + the ~7-row/1-month data gap (needs the friend's files/logs) |
+| 10 — Quantities + speed/logs + failure root-causes + GitHub | ✅ DONE 2026-08-21 — pushed to GitHub main. Quantities works (url token `quantity` + currency `na`); 143 NTL-quantities files verified. Retry queue (`finalRetryRounds`), emoji console + heartbeats, `speedProfile`, `npm run diagnose`. 61 failures root-caused + fixed: 45 mirror-only (source=mirror + HS6, values & quantities variants) + 15 big (30s→3min Save click). Green: isolation 45 / batch 36 / console 16 / manifest 26 / report 8 / runplan 20. **OPEN:** finish both machines to full coverage (big-15 + mirror-45) + Palestine/historical-name stragglers |
 
 ## Now
-**byProduct exports are PROVEN LIVE, end-to-end (2026-08-20).** A headed India run produced real workbooks for both
-**HS6** (6,117 rows) and **NTL** (13,995 tariff-line rows), range `200704-202605` read from the file. Live findings are
-wired: byProduct accepts an explicit range and clamps it into the URL (`chooseGateRange` feeds the pre-Save gate from
-the URL for byProduct, the DOM for byPartner); `waitForDataReady` gates Save on the data fetch (loader gone + rows
-settled — the export is server-side); `optionsReader` is calibrated to the custom `<app-single-picker>` controls;
-filenames carry the Detail level (NTL/HS6). The **production config** `config/config.production-ntl.json` (204 countries,
-byProduct NTL, randomized throttle, resume manifest) + a **word-by-word friend guide** (`docs/FRIEND_SETUP_GUIDE.md`)
-are committed. Green: isolation 44 / batch 26 / manifest 26 / report 8 / runplan 20, tsc clean. On `phase-1-poc`; **not pushed**.
-
-**Open from the friend's full 204-country run (143 SUCCESS / 57 FAILED):** the 57 failures' root cause is UNKNOWN
-(need `manifests/run-report-ntl.xlsx` + logs), and a manual-vs-automated file differs by **~7 rows + 1 month** (likely
-data-timing, since the export is server-side — needs BOTH files to confirm). Follow-up fixes already shipped:
-`--retry-failed`, mid-run login pause, row-settle wait, smaller throttle (2-6 / 45s-2.5min).
+**Phase 10 shipped + pushed to GitHub (2026-08-21).** Code is live on `main` at
+github.com/AazikoGlobalLLP/TRADE-MAP-AUTOMATION. **Quantities exports work** (URL token `quantity` singular + currency
+`na`); the user's device has **143 NTL-quantities files** (verified 0 empty, 4.2 GB). New: end-of-run **retry queue**
+(`finalRetryRounds`), **emoji console** logs + save/export **heartbeats**, one-word **`speedProfile`**, and `npm run diagnose`.
+The 61 failures were root-caused and split into targeted per-cause runs (own lists + manifests, resume-safe): **45
+"mirror-only" countries** (no Direct data → source=mirror + HS6) and **15 big countries** (30s Save-click → 3-min fix).
+Green: isolation 45 / batch 36 / console 16 / manifest 26 / report 8 / runplan 20, tsc clean. **Two machines in play:**
+user = QUANTITIES, friend = VALUES (both hit the SAME mirror-only + big-country walls; both now have configs).
 
 ## Next 3
-1. **Diagnose the friend's run.** Read the 57 failure reasons (run report + newest `logs/runs/*.log`) and **diff the two
-   workbooks** (manual vs automated, same country) to confirm/deny the data gap. Then pin `isLoginPage` to the real
-   login/session-expiry URL once captured.
-2. **Re-run only the failures on the friend's PC** — first get the UPDATED code there (fresh `git bundle` / re-copy; no
-   remote), then `npm run batch -- --config config/config.production-ntl.json --retry-failed`. If failures were blocking,
-   RAISE `throttlePause{Min,Max}Ms` (don't shrink further).
-3. **Push a properly-named branch + PR** (carries Phases 1–9): e.g.
-   `git checkout -b phase-9-byproduct-ntl` then `git push -u origin phase-9-byproduct-ntl`.
+1. **Finish the user's QUANTITIES set to 204** — big countries: `npm run batch -- --config config/config.production-big-ntl.json`
+   (mirror-45 fallback already finishing). Then confirm file count.
+2. **Finish the friend's VALUES set** — `git pull` on their PC, then the 45 mirror-only:
+   `npm run batch -- --config config/config.production-hs6-mirror-values.json`. (Use the plain command, NOT `--retry-failed`, on a
+   machine that never ran that data type — empty manifest → "nothing to do".)
+3. **Mop up the stragglers** — Palestine (DATE_ERROR) + ~6 historical/duplicate names (COUNTRY_NOT_FOUND). Low value; decide keep/skip.
 
 ## Carried into Phase 3 (from Phase 2)
 - One live `npm run export -- --country Dominica` to confirm the refactor didn't regress

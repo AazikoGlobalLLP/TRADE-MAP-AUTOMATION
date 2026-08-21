@@ -329,3 +329,23 @@ Format: date · decision · why · alternative rejected.
   HS6 file (identical name). deriveFlowTokens now emits {detailWord} (NTL/HS6/... or AllProducts); config.json + the production template
   use it. After a 204-run left 57 FAILED, --retry-failed runs ONLY the manifest's FAILED countries (avoids re-validating ~143 large
   SUCCESS workbooks). Production throttle reduced 1-5/2-7min -> 2-6 countries / 45s-2.5min (user: gaps too big).
+- **2026-08-21 · Phase 10 · speedProfile + finalRetryRounds + emoji console + pushed to GitHub.** Why: the run looked frozen and left
+  failures needing manual re-runs. `batch.speedProfile` (safe/balanced/fast) is one word over the 4 throttle numbers (never disables it —
+  real bottleneck is server-side NTL generation, not the throttle). `batch.finalRetryRounds` (default 3) queues failed countries and
+  retries them at the end, still throttled. Console shows emoji per-country lines; full JSON stays in the log file (`--raw-logs` to override).
+  Code pushed to main at github.com/AazikoGlobalLLP/TRADE-MAP-AUTOMATION (a merge, never --force; no secrets tracked).
+- **2026-08-21 · Phase 10 (live) · Quantities data type = SINGULAR url token `quantity` + currency `na`.** Why: building the plural
+  `quantities` left the page's Data type on "Choose" + "Error loading time series". Captured live from a working Lithuania URL
+  `.../direct/quantity/na/table`. Handled by DATATYPE_URL (build) + DATATYPE_FROM_URL (parse), mirroring the freq/viewBy maps, so config
+  stays readable and interactive mode is fixed too. Rejected: putting the literal token in config (breaks interactive + readability).
+- **2026-08-21 · Phase 10 (live) · ~45 "mirror-only" countries need source=mirror + detail=HS6.** Why: the run log proved
+  `.../direct/...` REDIRECTS to `.../6/mirror/...` for Syria/Moldova/Vietnam/etc. — they don't report Direct data, so only reconstructed
+  MIRROR (HS6-level) exists → FILTER_DRIFT on "source". Same 45 for both data types: quantities fallback (mirror+HS6+na) and values
+  fallback (mirror+HS6+USD). NOT a compliance bypass — mirror is the only data offered. The old "mirror disabled for byProduct" note was
+  a Direct-reporting country. Rejected: forcing direct (that IS the bug).
+- **2026-08-21 · Phase 10 (live) · Big-country Save-click timeout 30s -> 3min.** Why: 15 large importers (USA, Singapore, Türkiye…)
+  failed with "locator.click: Timeout 30000ms" — the Save button stays disabled while the huge export prepares. `SAVE_CLICK_TIMEOUT_MS`
+  (180000) auto-waits for it to enable. Also added Save/data-ready heartbeats so a multi-minute export reads as progress, not a hang.
+- **2026-08-21 · Phase 10 · targeted per-cause configs+lists instead of one big --retry-failed.** Why: the 61 failures had 3 different
+  causes needing different queries; one --retry-failed would re-grind doomed countries for hours. Each cause got its own input list + own
+  manifest (independent, resume-safe, never touches finished files). `npm run diagnose` added to debug a remote PC via one secret-free file.
