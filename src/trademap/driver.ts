@@ -202,15 +202,23 @@ export async function triggerSaveAndDownload(
   }
 }
 
-async function clickSave(page: Page): Promise<void> {
+/** How long to wait for the Save button to become ENABLED/clickable before giving up. For a big
+ *  country (USA, China, …) the export button stays disabled for a while after the rows appear, so
+ *  Playwright's default 30s click timeout was too short → "locator.click: Timeout 30000ms" was the
+ *  #1 big-country failure. Not a blind sleep: Playwright auto-waits and clicks the instant it's ready. */
+export const SAVE_CLICK_TIMEOUT_MS = 180000; // 3 min
+
+async function clickSave(page: Page, clickTimeoutMs: number = SAVE_CLICK_TIMEOUT_MS): Promise<void> {
   // The EXPORT Save is a Material menu trigger labelled EXACTLY "Save" (calibrated
   // 2026-08-17). A separate "Save query" button also exists and appears FIRST in the
   // DOM — the old `:has-text("Save").first()` would have clicked the wrong one.
   let saveButton = page.getByRole('button', { name: 'Save', exact: true }).first();
-  if (!(await saveButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+  if (!(await saveButton.isVisible({ timeout: 5000 }).catch(() => false))) {
     saveButton = page.locator('button.mat-mdc-menu-trigger', { hasText: 'Save' }).first();
   }
-  await saveButton.click();
+  // click() auto-waits for the button to be visible, stable AND enabled up to this timeout, so a
+  // big-country export whose Save enables late is no longer a 30s failure.
+  await saveButton.click({ timeout: clickTimeoutMs });
 
   // Save opens a Material menu of export formats; pick the XLSX/Excel item.
   const xlsxItem = page.getByRole('menuitem', { name: /xlsx|excel/i }).first();
