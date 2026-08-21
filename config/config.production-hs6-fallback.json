@@ -1,5 +1,5 @@
 {
-  "_note": "HS6 FALLBACK config for the ~45 countries that have NO NTL data (they failed the NTL run with FILTER_DRIFT because Trade Map drops/falls-back the NTL detail for them). Detail=HS6 (6-digit, which nearly every country reports) instead of NTL. It has its OWN input list (input/countries-no-ntl.xlsx, the 45 no-NTL countries) and its OWN manifest (latest-run-hs6-fallback.json), so it is fully INDEPENDENT: it never touches the 143 finished NTL files or the big-country NTL retry, and the order you run things in does not matter. Run: npm run batch -- --config config/config.production-hs6-fallback.json  (resume-safe; re-run to continue). Files are named with HS6-Quantities so they never collide with the NTL files. Everything else (quantities, currency=na, speed, throttle, retries) matches the NTL config.",
+  "_note": "MIRROR + HS6 fallback for the ~45 countries that only have MIRROR data (Syria, Tajikistan, Vietnam, Bangladesh, Cuba, Bhutan, Suriname…). ROOT CAUSE proven live 2026-08-21 from the run log: navigating .../6/direct/... REDIRECTS to .../6/mirror/... — these countries do NOT report their own (Direct) data, so Trade Map only serves reconstructed MIRROR data, which exists only at HS6 (partners report at HS6, not the importer's NTL). So source='mirror' + detail='HS6' here (NOT direct/NTL — that is why the NTL run failed them with FILTER_DRIFT on source). This is NOT a compliance bypass: mirror is the ONLY data Trade Map offers for them; the old 'mirror disabled for byProduct' note was for a Direct-reporting country. Own input list (input/countries-no-ntl.xlsx) + own manifest (latest-run-hs6-fallback.json) → fully INDEPENDENT, never touches the 143 finished files, order-agnostic. Run: npm run batch -- --config config/config.production-hs6-fallback.json  (resume-safe). Files carry HS6-...-Mirror so they never collide with the Direct/NTL files.",
   "tradeMapBaseUrl": "https://www.trademap.org",
   "outputDirectory": "./output",
   "browserProfileDir": "./browser-profile",
@@ -13,7 +13,7 @@
     "product": "ALL",
     "viewBy": "product",
     "frequency": "monthly",
-    "source": "direct",
+    "source": "mirror",
     "dataType": "quantities",
     "currency": "na",
     "view": "table",

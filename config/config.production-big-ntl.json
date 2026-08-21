@@ -1,0 +1,56 @@
+{
+  "_note": "BIG-COUNTRY NTL retry for the 15 large importers (USA, Canada, Singapore, Chinese Taipei, Türkiye, Thailand, Malaysia, Australia, Indonesia, Hungary, Denmark, Portugal, Morocco, Kazakhstan, New Zealand) that FAILED the main NTL run with DOWNLOAD_TIMEOUT (root cause: the Save button stayed disabled past Playwright's old 30s click timeout while the huge export prepared). These countries DO report Direct/NTL data, so config is the SAME as the NTL run (source=direct, detail=NTL, quantities, na) — only the Save-click timeout fix (now 3 min) is what makes them work. Own input list (input/countries-big.xlsx) + own manifest (latest-run-big-ntl.json) → fully INDEPENDENT, never touches the 143 finished files, order-agnostic. These files are BIG and export slowly server-side — watch the '💾 saving… / ⏳ still exporting…' heartbeat. Run: npm run batch -- --config config/config.production-big-ntl.json  (resume-safe).",
+  "tradeMapBaseUrl": "https://www.trademap.org",
+  "outputDirectory": "./output",
+  "browserProfileDir": "./browser-profile",
+  "logsDir": "./logs",
+  "countryCodesFile": "./config/country-codes.json",
+
+  "filters": {
+    "tradeFlow": "imports",
+    "exporter": "world",
+    "exporterCode": "000",
+    "product": "ALL",
+    "viewBy": "product",
+    "frequency": "monthly",
+    "source": "direct",
+    "dataType": "quantities",
+    "currency": "na",
+    "view": "table",
+    "detail": "NTL"
+  },
+
+  "auth": {
+    "maxLoginAttempts": 3
+  },
+
+  "datePolicy": {
+    "requestedStart": "200001",
+    "requestedEnd": "202606",
+    "mode": "MAX_WITHIN_REQUESTED_RANGE"
+  },
+
+  "download": {
+    "format": "xlsx",
+    "overwrite": false,
+    "collisionMode": "skip",
+    "timeoutMs": 600000,
+    "downloadAttempts": 2,
+    "dataReadyTimeoutMs": 900000
+  },
+
+  "batch": {
+    "inputFile": "./input/countries-big.xlsx",
+    "maxAttemptsPerCountry": 3,
+    "retryDelayMs": 2000,
+    "continueOnFailure": true,
+    "evidenceDir": "./screenshots/failures",
+    "speedProfile": "balanced",
+    "finalRetryRounds": 3
+  },
+
+  "manifestFile": "./manifests/latest-run-big-ntl.json",
+  "runReportFile": "./manifests/run-report-big-ntl.xlsx",
+
+  "filenameTemplate": "{countrySlug}__{flow}-from-World__{detailWord}-{dataTypeWord}__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}"
+}
