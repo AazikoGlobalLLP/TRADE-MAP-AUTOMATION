@@ -1,0 +1,56 @@
+{
+  "_note": "VALUES version of the mirror fallback — for the ~45 mirror-only countries (Syria, Moldova, Vietnam, Bangladesh, Cuba, Bhutan…) that have NO Direct data, run as VALUES (not quantities). Same root cause as the quantities fallback: navigating .../direct/... redirects to .../6/mirror/... , so source='mirror' + detail='HS6'. Difference from the quantities fallback: dataType='values' + currency='USD' (values HAVE a currency; confirmed from the friend's log redirect .../6/mirror/values/USD/table). Own input list (input/countries-no-ntl.xlsx, the 45) + own manifest (latest-run-hs6-mirror-values.json) → fully INDEPENDENT, never touches the 159 finished VALUES files, order-agnostic. Use this AFTER the main VALUES NTL run has skipped the 159 done and failed the 45 mirror-only. Run: npm run batch -- --config config/config.production-hs6-mirror-values.json  (resume-safe). Files carry HS6-Values...Mirror-USD so they never collide with the Direct/NTL files.",
+  "tradeMapBaseUrl": "https://www.trademap.org",
+  "outputDirectory": "./output",
+  "browserProfileDir": "./browser-profile",
+  "logsDir": "./logs",
+  "countryCodesFile": "./config/country-codes.json",
+
+  "filters": {
+    "tradeFlow": "imports",
+    "exporter": "world",
+    "exporterCode": "000",
+    "product": "ALL",
+    "viewBy": "product",
+    "frequency": "monthly",
+    "source": "mirror",
+    "dataType": "values",
+    "currency": "USD",
+    "view": "table",
+    "detail": "HS6"
+  },
+
+  "auth": {
+    "maxLoginAttempts": 3
+  },
+
+  "datePolicy": {
+    "requestedStart": "200001",
+    "requestedEnd": "202606",
+    "mode": "MAX_WITHIN_REQUESTED_RANGE"
+  },
+
+  "download": {
+    "format": "xlsx",
+    "overwrite": false,
+    "collisionMode": "skip",
+    "timeoutMs": 600000,
+    "downloadAttempts": 2,
+    "dataReadyTimeoutMs": 900000
+  },
+
+  "batch": {
+    "inputFile": "./input/countries-no-ntl.xlsx",
+    "maxAttemptsPerCountry": 3,
+    "retryDelayMs": 2000,
+    "continueOnFailure": true,
+    "evidenceDir": "./screenshots/failures",
+    "speedProfile": "balanced",
+    "finalRetryRounds": 3
+  },
+
+  "manifestFile": "./manifests/latest-run-hs6-mirror-values.json",
+  "runReportFile": "./manifests/run-report-hs6-mirror-values.xlsx",
+
+  "filenameTemplate": "{countrySlug}__{flow}-from-World__{detailWord}-{dataTypeWord}__{startPretty}_to_{endPretty}__{frequency}-{source}-{currency}.{extension}"
+}
